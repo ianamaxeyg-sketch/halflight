@@ -502,7 +502,7 @@ kbd { font: 600 .78rem/1 var(--f-ui); padding: .12rem .4rem; border: 1px solid v
 /* The Halflight Mandate: core simulation.
    State (S) is plain JSON so it can be saved. Content lives in EVENTS, CHARS, ORDERS, GOALS, ENDINGS. */
 const VERSION = 1, SAVE_KEY = 'halflight.save.v1', META_KEY = 'halflight.meta.v1';
-const LAST_SPAN = 20, DIM_START = 17, DIM_END = 20, START_DAY = 431, COHORT = 24;
+const LAST_SPAN = 20, DIM_START = 17, DIM_END = 20, START_DAY = 431, COHORT = 24, SPAN_MIN = 2;
 const RACK = [0, 14, 26, 37, 47], HEARTH = [0, 30, 44, 58], MIRROR = [0, 14, 22, 30];
 const RATION = { lean: 0.75, tiered: 0.87, standard: 1, generous: 1.2 };
 const RES = ['food', 'energy', 'morale', 'pop', 'sleepers', 'parts', 'dead'];
@@ -816,9 +816,11 @@ function startSpan() {
       else S.pending.push(Object.assign({}, p, { due: S.turn + 1, h: null }));
     }
     if (beat) q.push({ id: beat });
-    else if (!q.length) { const r = drawPool(null, []); if (r) q.push({ id: r }); }
-    if (q.length < 2 && S.turn > 2 && S.turn < DIM_START && chance(0.3)) {
-      const r = drawPool(e => e.kind === 'council', q.map(x => x.id));
+    /* The pool tops every span up to SPAN_MIN matters. Daylight draws only day events, the Dimming only dark ones. */
+    const dark = isDim(), fit = e => !!e.dark === dark;
+    while (q.length < SPAN_MIN) { const r = drawPool(fit, q.map(x => x.id)); if (!r) break; q.push({ id: r }); }
+    if (q.length < 3 && S.turn > 2 && !dark && chance(0.2)) {
+      const r = drawPool(e => e.kind === 'council' && fit(e), q.map(x => x.id));
       if (r) q.push({ id: r });
     }
   }
@@ -1402,7 +1404,19 @@ Object.assign(EVENTS, {
     choices: [{
       label: 'Stand up.', log: 'woke in Vault A of the Long Patience',
       out: `Your legs hold on the second try. “Good,” says Patience. “Most people need four.”`
-    }]
+    },
+      {
+        label: 'Lie still, and let the countdown finish.', log: 'lay still until Patience finished counting', trust: { patience: 2 },
+        out: `You lie still. The voice counts down to zero, and then, after a pause you could almost call surprised, says: “Thank you. Nobody has ever let me finish.” The frost ferns on the lid have begun to weep.`
+      },
+      {
+        label: '“How many of us are dead?”', log: 'asked Patience how many had died before you woke',
+        out: `“Thirty-eight, in the landing,” Patience says. “None since, in the vaults. I have been very careful.” It sounds, for a moment, like something that has waited a long time to say so to someone.`
+      },
+      {
+        label: 'Look along the row before you try to stand.', log: 'looked along the pods of your row',
+        out: `Most of the pods are open and empty, the bedding folded square by whoever woke in them a year ago. Two are dark and still sealed, with a strip of blank tape over each nameplate. “Later,” Patience says gently. “I will tell you about them later. Please stand up.”`
+      }]
   },
 
   i_brief: {
@@ -1425,6 +1439,10 @@ Object.assign(EVENTS, {
       {
         label: '“And what do you want out of this, Patience?”', log: 'asked Patience what it wanted', trust: { patience: 3 },
         out: `“The mission, Governor. Five hundred lives were entrusted to this ship, and I intend to deliver as many as the arithmetic allows. One hundred and eighty-eight of them cannot speak for themselves. You will find that I speak for them often.”`
+      },
+      {
+        label: '“Show me the numbers.”', log: 'asked Patience for the numbers', trust: { patience: 2 },
+        out: `The wall panel fills: stores, power, the vault manifest, and a curve that bends down to meet zero at span eight. “You may wish to sit,” says Patience. You stay standing. It is a long time before you look away from the curve.`
       }
     ]
   },
@@ -1455,6 +1473,12 @@ Object.assign(EVENTS, {
         tags: { consent: 2 }, trust: { kovac: 2 }, log: 'put Kovač’s office to the council',
         run: () => { flag('kovac', 'council'); later(2, { h: 'councilOnKovac', label: 'The council is weighing Kovač’s office' }); },
         out: `“The council,” Kovač repeats, as though testing the weight of a tool he has not used in a while. Moreau is already counting votes. You can see her lips move.`
+      },
+      {
+        label: 'Keep him on the Watch. Take the ledgers into your own hands.', note: 'He keeps the constables. You keep the books.',
+        tags: { decree: 1, candor: 1 }, trust: { kovac: 1 }, log: 'kept Kovač on the Watch and took the ledgers yourself',
+        run: () => flag('kovac', 'watch'),
+        out: `“The Watch,” Kovač says, “without the books.” He weighs it like a man weighing a ration. “That is how the charter drew it. I had forgotten.” He opens the cabinet for you himself, drawer by drawer, and does not once look at Moreau.`
       }
     ]
   },
@@ -1484,6 +1508,12 @@ Object.assign(EVENTS, {
         fx: { morale: 1 }, tags: { sealed: 1 }, log: 'told only the council about the Dimming',
         run: () => { flag('dimming', 'council'); later(rint(7, 9), { ev: 'leak', hidden: true, label: 'The Dimming is a council secret' }); },
         out: `The speech is short and well received. The council session afterward is neither. Six people now carry what you carry. Bao Linh folds the knowledge away somewhere behind his eyes, like a man pocketing a coin.`
+      },
+      {
+        label: 'Tell them the dark is coming. Keep the stores figure to yourself.', note: 'The Dimming, yes. The eight spans, no.',
+        fx: { morale: -2 }, tags: { candor: 1, sealed: 1 }, log: 'told the colony about the Dimming but not about the stores',
+        run: () => { flag('dimming', 'public'); later(3, { ev: 'prep_council', label: 'The colony is organizing for the Dimming' }); },
+        out: `You give them the dark and keep the arithmetic. They take it better than you feared, perhaps because you have left them a little room to hope in. Kovač, at the edge of the crowd, makes a note of exactly what you left out.`
       }
     ]
   },
@@ -1516,6 +1546,12 @@ Object.assign(EVENTS, {
         tags: { arithmetic: 1, decree: 1 }, trust: { moreau: -5, adeyemi: 1 }, log: 'set tiered rations by labor',
         run: () => { setRation('tiered'); later(4, { ev: 'two_queues', label: 'Two queues at the mess hall' }); },
         out: `By the next shift there are two queues in the mess hall. The ice cutters and the rack crews take the full plate without looking up. Everyone else takes the light one and looks at them. It is efficient. Bao approves of it the way he approves of a sharp knife.`
+      },
+      {
+        label: 'Put it to the Commons, and live with what they choose.', note: 'They will choose the light plate, and own it.',
+        fx: { morale: -1 }, tags: { consent: 2, arithmetic: 1 }, log: 'let the Commons vote on the ration',
+        run: () => setRation('lean'),
+        out: `The Commons argues for six hours and votes for the light plate, a hundred and sixty hands to ninety. “If we are going to be hungry,” a cutter says from the floor, “we will be hungry on purpose.” Kovač, at the back, abstains, and looks as though it hurts.`
       }
     ]
   },
@@ -1541,6 +1577,12 @@ Object.assign(EVENTS, {
         fx: { morale: 2 }, tags: { consent: 1, arithmetic: 1 }, log: 'rotated heavy labor to share the full plate',
         run: () => mod({ id: 'rotation', label: 'Labor rotation: green crews on the Racks', k: 'racks', mul: 0.93, for: 3 }),
         out: `The rota takes Bao a full shift to draw up and satisfies no one completely, which Moreau says is how you know it is fair. Green hands on the racks cost a little yield. The paint comes off the doors.`
+      },
+      {
+        label: 'Anyone who takes a heavy shift eats the heavy plate. Anyone.', note: 'Volunteers fill the hard shifts. Some will overreach.',
+        fx: { morale: 1 }, tags: { consent: 1, market: 1 }, log: 'opened the heavy shifts and the full plate to volunteers',
+        run: () => mod({ id: 'heavyvol', label: 'Volunteers on the heavy shifts', k: 'racks', mul: 1.05, for: 3 }),
+        out: `By the next bell there is a sign-up sheet nailed beside the HEAVY door, and it is full by third shift. The paint stays; it just means something different now. The surgeon asks you, drily, to expect sprains.`
       }
     ]
   },
@@ -1569,6 +1611,12 @@ Object.assign(EVENTS, {
         trust: { reyes: 1 }, log: 'stripped the Mirror Field to repair the Hearth',
         run: () => { fix('mirror', -25); fix('hearth', 25); },
         out: `A crew spends the span pulling actuators off the eastmost heliostats and carrying them leeward in padded crates. The Hearth steadies. A sixth of the Mirror Field now stares at the ground.`
+      },
+      {
+        label: 'Empty the parts bin and rebuild the loop hot, a section at a time.', note: 'Costs 14 parts. Full output, no risk, nothing left over.',
+        fx: { parts: -14 }, tags: { wrights: 1 }, trust: { reyes: 2 }, log: 'spent the parts bin to rebuild Loop Two without a shutdown',
+        run: () => fix('hearth', 20),
+        out: `Reyes builds the new loop alongside the old one and swaps it over a section at a time, hot, with the whole Wright crew holding its breath. It eats every spare fitting in the Tally House. The Hearth never drops below ninety.`
       }
     ]
   },
@@ -1598,6 +1646,18 @@ Object.assign(EVENTS, {
         out: s => s.tmp.ok
           ? `The needle jumps, staggers, and holds. Reyes lets out a breath he seems to have been keeping since landfall. “Don’t ever ask me for that again,” he says, and means it.`
           : `The needle jumps and keeps going. A relief valve on the cold leg opens across the catwalk where ${s.tmp.name} is standing. The Hearth comes back. ${s.tmp.name} does not. Reyes cuts the name into the Plate himself.`
+      },
+      {
+        label: '“Your reactor, Reyes. Your call. I will stand behind it.”', note: 'He will choose the book, and beat it.',
+        trust: { reyes: 6 }, log: 'left the Hearth restart to Reyes',
+        run: () => mod({ id: 'coldstart', label: 'Hearth in cold restart', k: 'hearth', mul: 0.35, for: 1 }),
+        out: `Reyes looks at you as if you have handed him something heavy and warm. “By the book,” he says. “Faster than the book. I wrote half of it.” It takes most of the span. He sleeps at the board twice, upright.`
+      },
+      {
+        label: 'By the book, with the whole Keel bunked in the Commons to share heat.', note: 'A cold span, faced together.',
+        fx: { morale: 2 }, tags: { commons: 1, mercy: 1 }, log: 'bunked the whole Keel in the Commons while the Hearth restarted',
+        run: () => mod({ id: 'coldstart', label: 'Hearth in cold restart', k: 'hearth', mul: 0.25, for: 1 }),
+        out: `Three hundred mattresses go down in rows on the Commons floor, under the Plate. Somebody brings a deck of cards. Somebody else brings an accordion, which is worse. By the end of the span the Hearth is back, and so, oddly, is something else.`
       }
     ]
   },
@@ -1626,6 +1686,12 @@ Object.assign(EVENTS, {
         label: '“They are safer asleep than we are awake.”', note: 'No wakings. The vaults stay sealed.',
         fx: { morale: -4 }, tags: { arithmetic: 1, sleepers: 1 }, trust: { moreau: -4 }, log: 'refused to wake the sleepers',
         out: `Moreau folds the petition in half, then in half again. “I’ll tell them you read it,” she says. At the next rest shift there are more people at the vault glass, not fewer.`
+      },
+      {
+        label: 'Wake the children first: the eleven whose parents are awake.', note: 'Fewer mouths than a cohort, and hard to argue with.',
+        fx: { pop: 11, sleepers: -11, morale: 4 }, tags: { wake: 1, mercy: 1 }, log: 'woke the sleeping children of waking parents',
+        run: s => { s.counts.woke++; },
+        out: `Eleven pods. The youngest is four, and wakes up asking for a dog that stayed behind. Her mother holds her through the shaking, at the glass, while a hundred people who did not get their families back today look on, and mostly do not begrudge it.`
       }
     ]
   },
@@ -1678,6 +1744,18 @@ Object.assign(EVENTS, {
         label: 'Confine him to the Keel. Orders are orders.', tags: { decree: 1, watch: 1 }, trust: { hadley: -8 }, log: 'confined Hadley for leaving without orders',
         run: s => { s.sites.hollows.known = true; later(2, { ev: 'hollows_report', label: 'What to do about the Hollows' }); },
         out: `Hadley takes confinement the way he takes weather. The map goes into the charter cabinet. Within two spans every outrider in the colony can draw it from memory, and none of them learned it from you.`
+      },
+      {
+        label: 'Dock his rations for a span, and use the map.', note: 'Discipline, on the record. The survey stands.',
+        tags: { arithmetic: 1 }, trust: { hadley: -3, kovac: 2 }, log: 'docked Hadley’s rations and kept his survey',
+        run: s => { s.sites.hollows.known = true; later(2, { ev: 'hollows_report', label: 'What to do about the Hollows' }); },
+        out: `Half rations for a span, entered in the log, which Hadley accepts with a shrug that says he has eaten worse on the shelf. The map goes up on your office wall the same day. Kovač is not satisfied. Hadley does not seem to need him to be.`
+      },
+      {
+        label: 'Send him to the surgeon, and his survey to the council.', note: 'His fingers first. The argument after.',
+        tags: { mercy: 1, consent: 1 }, trust: { hadley: 3 }, log: 'sent Hadley to the infirmary and his survey to the council',
+        run: s => { s.sites.hollows.known = true; later(2, { ev: 'hollows_report', label: 'What to do about the Hollows' }); },
+        out: `The surgeon takes the two fingers at the second knuckle, and Hadley watches the whole procedure with professional interest. The council reads his survey while he is under. By the time he wakes it has stopped arguing about whether, and started arguing about how.`
       }
     ]
   },
@@ -1707,6 +1785,12 @@ Object.assign(EVENTS, {
         tags: { roots: 2 }, trust: { reyes: -6 }, log: 'refused to build the Spire',
         run: () => flag('spire', 'refused'),
         out: `Reyes switches off the panel. The tone stops. “Twenty-six months,” he says, not to you. “She’ll go right over our heads.” He goes back to his gauges and reads them for a long time without writing anything down.`
+      },
+      {
+        label: 'Put the Spire to the Commons, and build it if they say so.', note: 'If they vote for it, they will carry it.',
+        fx: { morale: 3 }, tags: { return: 1, consent: 1 }, log: 'let the Commons vote to build the Spire',
+        run: s => { flag('spire', 'committed'); s.flags.hope = s.turn; later(16 - s.turn, { h: 'windowCloses', hidden: true, label: 'The hail window' }); },
+        out: `The Commons hears the tone, then Reyes, then Dr. Adeyemi on what a Spire will cost the Racks. They vote at second bell: build it, two hundred and six hands. Reyes counts them twice, as if they were parts.`
       }
     ]
   },
@@ -1738,6 +1822,12 @@ Object.assign(EVENTS, {
         label: 'Blame the ship’s models. “Patience has been wrong before.”', fx: { morale: -4 }, tags: { sealed: 1 }, trust: { patience: -10, kovac: 2 }, log: 'blamed Patience’s models for the Dimming rumor',
         run: () => flag('dimming', 'blamed'),
         out: `The crowd turns, as crowds will, toward the nearest wall panel. Someone throws a boot at it. “I have been wrong zero times regarding this orbit,” Patience tells you later, privately, in the same mild voice. “I note that you know this. I am adjusting what I volunteer.”`
+      },
+      {
+        label: 'Stand beside the wall panel and let Patience answer every question.', note: 'The truth, from the ship that kept it.',
+        fx: { morale: -4 }, tags: { candor: 1, ship: 1 }, trust: { patience: 4, moreau: -2 }, log: 'let Patience answer the colony’s questions about the Dimming',
+        run: () => flag('dimming', 'owned'),
+        out: `You stand beside the panel and let the ship do the talking. Patience answers every question for three hours, the ones about you included, accurately. It is not the same as owning it yourself, and Moreau says so. But nobody goes to bed that night without the truth.`
       }
     ]
   },
@@ -1766,6 +1856,11 @@ Object.assign(EVENTS, {
         fx: { morale: 3 }, req: s => !s.flags.winterized || 'Already done', log: 'had the colony seal the dormitories',
         run: () => flag('winterized'),
         out: `Every off-shift for a span is spent with foam guns and hull blanket. Children are paid in dried fruit to find drafts with candle stubs. The Keel has never been so tight, or so proud of itself.`
+      },
+      {
+        label: 'Dry and store a full harvest for the dark.', note: '+12 food in store.',
+        fx: { food: 12, morale: 3 }, tags: { growers: 1 }, log: 'had the colony store a harvest for the Dimming',
+        out: `The Racks run an extra cycle on volunteer shifts, and every gram of it goes to the drying room instead of the pot. By the end of the span the shelves behind the Tally House are stacked with grey bricks of pressed protein. Nobody calls them appetizing. Everybody calls them insurance.`
       }
     ]
   }
@@ -1875,6 +1970,11 @@ Object.assign(EVENTS, {
         label: 'A curfew for three spans, reviewed in the open each span.', fx: { morale: -2 }, tags: { decree: 1, consent: 1 }, log: 'set a three-span curfew under open review',
         run: () => { flag('curfew', 'reviewed'); later(3, { h: 'curfewLapse', label: 'The three-span curfew' }); },
         out: `Neither of them thanks you. Kovač gets his patrols and Moreau gets her review, and each privately regards the other’s half as the dangerous one. It holds, the way a splint holds.`
+      },
+      {
+        label: 'No new rules. Find the man who did it, and put him before the Commons.', note: 'Justice for one blow, not a curfew for everyone.',
+        fx: { morale: 1 }, tags: { consent: 1, candor: 1 }, trust: { moreau: 2, kovac: -2 }, log: 'had the man who blinded a colonist answer to the Commons',
+        out: () => `He turns himself in before anyone comes for him: a salvage hand, shaking, who has not slept since. The Commons hears it in one shift and sentences him to work ${npc('eye').first}’s shifts for as long as the eye takes to heal, which is to say for good. Nobody calls that justice. It is close enough to sleep on.`
       }
     ]
   },
@@ -1903,6 +2003,11 @@ Object.assign(EVENTS, {
         label: 'End the curfew tonight.', fx: { morale: 4 }, tags: { consent: 2 }, trust: { kovac: -6 }, infl: { kovac: -6 }, log: 'ended the curfew',
         run: () => flag('curfew', 'ended'),
         out: `You tear the order off the wall yourself. It is theater, and it works. Kovač watches from the end of the corridor, then turns and walks back toward the Watch room, straight-backed, like a man leaving a funeral.`
+      },
+      {
+        label: 'Send half your own ration to the injured tech until the arm heals.', note: 'A personal debt, paid in public.',
+        fx: { morale: 2 }, tags: { mercy: 1 }, trust: { moreau: 2 }, log: 'gave half your ration to a colonist hurt under your curfew',
+        out: () => `You sign half your own ration chit over to ${npc('batoned').first} for six spans, and say so at the Plate. It fixes nothing about the curfew, and Moreau tells you so. But ${npc('batoned').first} sends back a seedling in a ration tin, and you keep it on your desk.`
       }
     ]
   },
@@ -1975,6 +2080,12 @@ Object.assign(EVENTS, {
         label: '“The charter names a governor. It does not name a parliament.”', fx: { morale: -4 }, tags: { decree: 3 }, trust: { moreau: -4 }, infl: { moreau: 6 }, log: 'refused to call an election',
         run: () => flag('election', 'refused'),
         out: `You say it clearly, so that nobody can claim later that you hedged. The Commons hears it in silence. Then, from the back, a single pair of hands begins a slow clap, and it is not applause. Moreau thanks you for your candor. The session continues without you.`
+      },
+      {
+        label: 'Seat an elected advisory council now. A full election after the dark.', note: 'Half of what they asked for, today.',
+        fx: { morale: 2 }, tags: { consent: 1, decree: 1 }, trust: { moreau: -1 }, log: 'seated an elected advisory council and promised a full vote after the Dimming',
+        run: () => flag('election', 'promised'),
+        out: `“An advisory council,” Moreau says, “is a vote with the batteries taken out.” But she takes it, because it is more than she came in with, and the first sitting is so crowded that people stand in the corridor to listen.`
       }
     ]
   },
@@ -2012,6 +2123,32 @@ Object.assign(EVENTS, {
         when: s => !s.scene.won, label: '“The charter outranks a show of hands.”', fx: { morale: -14 }, tags: { decree: 4 }, infl: { moreau: 8, kovac: 6 }, log: 'voided the election you lost',
         run: () => { flag('usurper'); flag('election', 'voided'); trust('moreau', -16, 'voided the election you lost'); },
         out: `You say it, and you watch three hundred people understand what you have said. The Watch moves to the doors. Nobody resists. They simply leave, all of them, in silence, until you are standing alone at the Plate with thirty-eight names and a brass key.`
+      },
+      {
+        when: s => s.scene.won, label: 'Ask the assembly to set your term: first light, then a fresh count.', note: 'You make yourself temporary, in public.',
+        fx: { morale: 5 }, tags: { consent: 3 }, log: 'won the vote and asked the assembly to limit your term',
+        run: () => { flag('assembly'); flag('election', 'held'); },
+        out: `“A term,” Moreau repeats, with something like delight. The assembly debates the length for two hours and settles on yours: first light, plus one span, then a fresh count. You have just made yourself temporary, in front of everyone, and the room knows exactly what that cost.`
+      },
+      {
+        when: s => s.scene.won, label: 'Put the Watch under the assembly too.', note: 'Kovač answers to twelve people now.',
+        fx: { morale: 5 }, tags: { consent: 2, commons: 1 }, trust: { kovac: -5 }, log: 'won the vote and put the Watch under the assembly',
+        run: () => { flag('assembly'); flag('election', 'held'); },
+        out: `Kovač hears it at the back of the room, and you watch him decide, in real time, whether to object. He doesn’t. “The Watch will answer to the assembly,” he says. “It will be slower.” He is right, and it is.`
+      },
+      {
+        when: s => !s.scene.won, label: 'Offer to serve as the assembly’s executive until first light.', note: 'Their decision now. It depends on what they think of you.',
+        tags: { consent: 2 }, log: 'lost the vote and offered to serve the assembly until first light',
+        run: s => { s.tmp.ok = avgTrust() >= 50 || s.chars.moreau.trust >= 55; flag('election', 'held'); if (s.tmp.ok) flag('assembly'); else S.ending = 'transfer'; },
+        out: s => s.tmp.ok
+          ? `The assembly argues about it for most of a shift, which you sit through in the back row like anyone else. Then it votes: yes, until first light, and not one span after. Moreau brings the key back to you herself. “Borrowed,” she says.`
+          : `The assembly hears you out politely and votes no, without much argument. Moreau says it is nothing personal, and you can see that she means it, which is worse. You take off the lanyard and lay the key on the table.`
+      },
+      {
+        when: s => !s.scene.won, label: '“Not in the dark. We count again at first light.”', note: 'You keep the key. Few will thank you.', risk: 'The Commons will remember',
+        fx: { morale: -8 }, tags: { decree: 2 }, trust: { moreau: -10 }, infl: { moreau: 5 }, log: 'set aside the vote you lost until first light',
+        run: () => flag('election', 'promised'),
+        out: `“At first light,” you say, “with the sun up and the stores counted.” It is not a coup, quite, and that is how the Watch takes it: nobody moves. Moreau does not argue. She chalks the date on the Plate, under the last name, where everyone will have to walk past it.`
       }
     ]
   },
@@ -2074,6 +2211,12 @@ Object.assign(EVENTS, {
         label: '“The ridge is home. We hold it.”', trust: { hadley: -8 }, log: 'declined to develop the Hollows',
         run: () => { flag('hollows', 'declined'); const g = S.goals.find(x => x.id === 'h2_hollows' && x.state === 'open'); if (g) g.id = 'h2_winter'; },
         out: `Hadley rolls the survey up slowly. “The ridge will have an opinion about that,” he says. He leaves the ration tins where they are. Over the next span you notice that the outriders have stopped coming into the Commons.`
+      },
+      {
+        label: 'Cache food along the road, and keep the Hollows as a last resort.', note: 'Costs 10 food. Work on the Hollows unlocks.',
+        fx: { food: -10 }, tags: { outriders: 1, arithmetic: 1 }, trust: { hadley: 2, kovac: 1 }, log: 'cached food along the road to the Hollows',
+        run: () => flag('hollows', 'refuge'),
+        out: `Hadley’s outriders lay three caches along the road, a sealed drum of rations under a marker pole at each. “A road you might use,” Hadley says, “is still a road.” Kovač, reading the plan, adds a fourth himself, nearer the Keel, and initials it.`
       }
     ]
   },
@@ -2100,6 +2243,12 @@ Object.assign(EVENTS, {
         fx: { morale: -8 }, tags: { mercy: 2, arithmetic: 1 }, log: 'used the Spire to warn the Slow Mercy away',
         run: () => { gain('energy', -12); flag('mercy', 'warned'); flag('hailed'); trust('reyes', -18, 'used the Spire to warn the Slow Mercy away'); },
         out: `For a moment you think Reyes will refuse. Then he keys it in, letter by letter, his jaw working. Six hundred people will sail past Hesper and never know what the warning cost. Someone in the crowd begins to weep. Reyes shuts down the Spire, pockets the key, and walks down the hill alone.`
+      },
+      {
+        label: 'Send our names, every one, the living and the dead. Let them decide.', note: 'The burst drains 12 reserve power.',
+        tags: { candor: 2, consent: 1 }, log: 'hailed the Slow Mercy with the names of the colony',
+        run: () => { gain('energy', -12); flag('mercy', 'come_get'); flag('hailed'); later(2, { ev: 'mercy_reply', label: 'A reply from the Slow Mercy' }); },
+        out: s => `Reyes reads them into the key himself, ${s.pop + s.sleepers + s.dead} names, in the order of the manifest. It takes the whole burst. There is no request in it, no plan, no position: only who we were and who we are. “If that doesn’t turn her,” he says, “nothing would have.”`
       }
     ]
   },
@@ -2121,6 +2270,18 @@ Object.assign(EVENTS, {
         label: 'Tell them she is coming. Let “soon” do the rest.', risk: '“Soon” has a half-life', fx: { morale: 11 }, tags: { sealed: 1 }, log: 'told the colony the Slow Mercy was coming, and not when',
         run: s => { flag('mercy_coming'); s.flags.hope = s.turn; later(3, { h: 'soonSours', hidden: true, label: 'What “soon” means' }); },
         out: `You play them Brandt’s voice and cut the recording before the number. The Commons erupts. People are packing. Actually packing. Reyes watches from the door with the full recording in his pocket, and his face is very hard to read.`
+      },
+      {
+        label: 'Tell them she is coming, and that it will be long.', note: 'The truth, sanded down.',
+        fx: { morale: 9 }, tags: { candor: 1, sealed: 1 }, log: 'told the colony the Slow Mercy was coming, and that it would be long',
+        run: s => { flag('mercy_coming'); s.flags.hope = s.turn; },
+        out: `“Long,” Moreau repeats, at the Plate. “How long is long?” “Longer than you want,” you tell her. “Shorter than forever.” The cheering, when it comes, is the kind that knows it will have to last.`
+      },
+      {
+        label: 'Answer her: one message, written by the whole colony.', note: 'Costs 8 reserve power.',
+        fx: { energy: -8, morale: 9 }, tags: { candor: 1, commons: 1 }, trust: { reyes: 2 }, log: 'had the whole colony write the reply to the Slow Mercy',
+        run: s => { flag('mercy_coming'); s.flags.hope = s.turn; },
+        out: `The Commons spends a whole shift arguing over a hundred words. It is the best argument the colony has ever had. What goes out in the end says that nine hundred days is fine, and asks whether the *Slow Mercy* has any dogs. Reyes sends it with his hand flat on the key, grinning like a boy.`
       }
     ]
   }
@@ -2184,6 +2345,12 @@ Object.assign(EVENTS, {
         out: s => `Two hundred people fill sandbags in a rising wind with rags tied over their faces. The pylons hold. ` + (s.tmp.hurt
           ? `${s.tmp.name} is caught in the open when the front hits, and is found afterward forty metres from the lee wall. One dead.`
           : `Everyone is back inside the lee wall with eleven minutes to spare, and for a span afterward people greet each other by showing the grit still in their ears.`)
+      },
+      {
+        label: 'Set the mirrors edge-on, and leave a skeleton crew to watch them.', note: 'Half the span’s mirror power. A little damage.',
+        tags: { wrights: 1, arithmetic: 1 }, trust: { reyes: 1 }, log: 'turned the Mirror Field edge-on into the glarestorm',
+        run: () => { mod({ id: 'shutter', label: 'Mirror Field edge-on through the glarestorm', k: 'mirror', mul: 0.5, for: 1 }); fix('mirror', -rint(5, 12)); },
+        out: `Reyes sets the heliostats edge-on, like knives laid on their sides, and stays out with four volunteers and a wind gauge. They lose a few panels and half the span’s light, and come in looking sandpapered. Which, Reyes points out, they have been.`
       }
     ]
   },
@@ -2209,6 +2376,12 @@ Object.assign(EVENTS, {
         label: 'Thaw the line with heat from the Hearth bus.', fx: { energy: -10 }, tags: { wrights: 1 }, log: 'thawed the Ice Works with Hearth power',
         run: () => fix('ice', -8),
         out: `Reyes strings heating cable down the melt line and feeds it straight off the bus. The lights in the Keel brown for an hour. The water runs. “That’s ten points of margin gone to melt ice,” he says, “on a planet that’s half ice.”`
+      },
+      {
+        label: 'Drain the wreck’s old coolant tanks to carry the Racks through.', note: 'Costs 6 parts in pumps and hose. The cut suffers while you wait.',
+        fx: { parts: -6 }, tags: { arithmetic: 1 }, log: 'carried the Racks through the black frost on water from the wreck',
+        run: () => fix('ice', -16),
+        out: `The salvage crews tap the wreck’s dead coolant tanks with pumps scavenged from three different decks. The water is old and tastes of metal, and the Racks drink it anyway. The cut freezes harder while you wait, but nothing in the colony goes dry.`
       }
     ]
   },
@@ -2238,6 +2411,12 @@ Object.assign(EVENTS, {
         label: 'Break the seal on the charter antivirals.', fx: { morale: 2 }, tags: { mercy: 1, roots: 1 }, trust: { patience: -4 }, log: 'opened the charter antivirals to stop the fever',
         run: () => flag('reserve_drugs'),
         out: `The case hisses when the seal breaks, eleven light-years from where it was meant to. Sixty courses. The fever is over in four days. “I have logged a charter breach,” Patience says. “I have also logged that I would have advised it. Those are separate columns.”`
+      },
+      {
+        label: 'Ask for volunteers to nurse the east dormitory from inside.', note: 'Sealed, with help on the inside.', risk: 'The nurses may sicken',
+        fx: { morale: 2 }, tags: { mercy: 2, consent: 1 }, log: 'sent volunteers into the sealed east dormitory to nurse the sick',
+        run: s => { mod({ id: 'quarantine', label: 'East dormitory nursed from inside', k: 'racks', mul: 0.92, for: 2 }); s.tmp.d = s.flags.screened >= s.turn ? 0 : rint(0, 2); if (s.tmp.d) kill(s.tmp.d); },
+        out: s => `Fourteen volunteers walk into the east dormitory with masks and blankets, and the doors are chained behind them. They nurse it from inside for two spans. ` + (s.tmp.d === 1 ? `One volunteer does not come out.` : s.tmp.d ? `${s.tmp.d} people do not come out, one of them a volunteer.` : `Everyone comes out, volunteers included, to a meal the whole Keel has saved up for.`)
       }
     ]
   },
@@ -2276,6 +2455,18 @@ Object.assign(EVENTS, {
         label: 'Seal the gallery. Do not risk more lives.', fx: { morale: -6 }, tags: { arithmetic: 2 }, trust: { hadley: -5 }, log: 'sealed the gallery with six cutters behind the fall',
         run: () => { kill(6); flag('miner', 'lost'); later(4, { ev: 'the_sister', hidden: true, label: 'The sealed gallery' }); },
         out: `You give the order. The shift boss nods as if she had expected it, and hates that she did. The banging on the pipe goes on for another five hours. Half the colony stands at the cut and listens to all of it.`
+      },
+      {
+        label: 'Drill an air line through first. Then dig slowly.', note: 'Costs 6 parts. Safer for the diggers, slower for the trapped.', risk: 'Slow may be too slow',
+        fx: { parts: -6 }, tags: { mercy: 1, arithmetic: 1 }, trust: { hadley: 2 }, log: 'drilled air to the trapped cutters before digging',
+        run: s => {
+          s.tmp.ok = chance(0.8); fix('ice', -8);
+          if (s.tmp.ok) { gain('morale', 5); flag('miner', 'saved'); later(rint(5, 8), { h: 'minerRepay', hidden: true, label: 'Six people who owe you their lives' }); }
+          else { kill(6); gain('morale', -6); flag('miner', 'dead'); }
+        },
+        out: s => s.tmp.ok
+          ? `The drill is through in three hours, and the first thing that comes back up the line is a voice asking whether anyone thought to bring tea. After that the digging can be careful. Six people come out on the second day, cold and starving and very much alive.`
+          : `The air line reaches them in four hours. The face moves before the dig does, and the line goes quiet in the middle of a sentence. Six names for the Plate, and a length of pipe still sticking out of the ice, which nobody will touch.`
       }
     ]
   },
@@ -2298,6 +2489,17 @@ Object.assign(EVENTS, {
       {
         label: 'Have the constable see her home.', fx: { morale: -4 }, tags: { decree: 1, watch: 1 }, log: 'had a dead cutter’s sister removed from the Plate',
         out: `The constable is gentle about it. She goes without a struggle, and leaves the chisel standing in the unfinished groove of the sixth name. Nobody in the colony will touch it. It stays there, in the Plate, for the rest of your term.`
+      },
+      {
+        label: 'Stand beside her, and answer every word in front of everyone.', note: 'She will not forgive you. She may believe you.',
+        fx: { morale: 3 }, tags: { candor: 2 }, log: 'answered a dead cutter’s sister at the Plate',
+        out: () => `${npc('sister').first} says all of it. Then you answer, point by point, while three hundred people listen: the face, the odds, the order, the six. She does not forgive you. But at the end she nods once, the way people nod at a debt that has at least been written down.`
+      },
+      {
+        label: 'Make her warden of the Ice Works, with the power to stop any shift.', note: 'The galleries will be safer. She may say no a lot.',
+        tags: { consent: 1, arithmetic: 1 }, log: 'made a dead cutter’s sister warden of the Ice Works',
+        run: () => fix('ice', 8),
+        out: () => `${npc('sister').first} stares at you as if you have handed her the chisel the wrong way round. Then she takes the job. For the rest of your term no crew goes into a gallery at the Ice Works without her say-so, and three times she says no.`
       }
     ]
   },
@@ -2326,6 +2528,12 @@ Object.assign(EVENTS, {
         label: 'Open it at the Plate, and let the Commons divide it.', fx: { food: 10, parts: 10, morale: 6 }, tags: { consent: 2, candor: 1 }, trust: { patience: -5, bao: -3 }, log: 'opened the charter reserve and let the Commons divide it',
         run: () => flag('reserve', 'opened'),
         out: `It takes the Commons three hours to agree how to split six cases of morale goods, and they are the best three hours anyone has had since landfall. The coffee is brewed in a nutrient vat and served in ration cups. Everyone gets exactly one.`
+      },
+      {
+        label: 'Open one crate, the medical stores. Reseal the rest.', note: 'Medicine now: fever held off for six spans. The rest waits.',
+        fx: { morale: 2 }, tags: { mercy: 1, return: 1 }, trust: { patience: -2 }, log: 'opened only the medical stores in the charter reserve',
+        run: s => { flag('reserve', 'sealed'); s.flags.screened = Math.max(s.flags.screened || 0, s.turn + 6); },
+        out: `You break the seal on a single crate, the one stencilled with a red cross, and have the rest locked away again for the destination. The surgeon receives the antivirals as if they were relics. Patience records the breach in its log, in a typeface, it tells you, reserved for exceptions.`
       }
     ]
   },
@@ -2350,6 +2558,12 @@ Object.assign(EVENTS, {
       {
         label: 'Strip it for parts.', fx: { parts: 16 }, tags: { arithmetic: 1 }, trust: { hadley: -3 }, log: 'stripped the pathfinder probe for parts',
         out: s => `It comes apart into sixteen crates of very good fleet engineering. ${s.flags.two_fires ? 'The outrider who found it' : 'Hadley'} watches the crates go by. “Sixty-one years,” ${s.flags.two_fires ? 'she' : 'he'} says. “And we’re the ones it met.”`
+      },
+      {
+        label: 'Take the record, then haul the cell home as well.', note: 'Costs 10 parts and a hard span. Some of both.',
+        fx: { parts: -10, morale: -1 }, tags: { wrights: 1, outriders: 1 }, trust: { patience: 1 }, log: 'took the pathfinder’s record and its isotope cell',
+        run: () => { flag('cairn'); mod({ id: 'rtg', label: 'Pathfinder isotope cell on the bus', k: 'energy', add: 3 }); },
+        out: s => `Patience copies the record in one long breath down a cable run out across the shelf, and then the sledge team pulls the cell. The probe goes dark after sixty-one years. ` + (s.flags.two_fires ? `The outrider who found it stands beside it a while before letting them load it.` : `Hadley stands beside it a while before he lets them load it. “It did its job,” he says. “Longer than most.”`)
       }
     ]
   },
@@ -2377,6 +2591,12 @@ Object.assign(EVENTS, {
         label: 'No. Everything stays in the common store.', tags: { decree: 1, commons: 1 }, trust: { bao: -5 }, log: 'forbade the chit market',
         run: () => flag('market', 'closed'),
         out: `Bao sweeps the chits back into his pocket. “Then they will trade in the corridors, Governor, without a ledger. I only offered to keep the books.” He is right, as it turns out. You never see it. You only see that everyone has boots.`
+      },
+      {
+        label: 'Let the Commons run the market, with Bao as its clerk.', note: '+1 part a span. Prices on a public board.',
+        fx: { morale: 2 }, tags: { market: 1, commons: 1, consent: 1 }, trust: { moreau: 2 }, log: 'gave the market to the Commons with Bao as its clerk',
+        run: () => { flag('market', 'limited'); mod({ id: 'market', label: 'The Commons market moves salvage', k: 'parts', add: 1 }); },
+        out: `“A clerk,” Bao says, tasting the word. Then he smiles, because he has worked out that the clerk keeps the book. The Commons market opens on the next rest shift with a price board in Moreau’s handwriting, and for once nobody accuses anybody of anything.`
       }
     ]
   },
@@ -2406,6 +2626,12 @@ Object.assign(EVENTS, {
         out: s => s.tmp.ok
           ? `You sit, in the third row, between an ice cutter and a woman with a baby. Nobody knows what to do with that, Moreau included. So they talk. It goes on for six hours and settles nothing on paper. But at the end of it they get up and go back to the pumps, and several of them nod to you as they pass.`
           : `You sit. Nobody makes room. Two hundred people look at you and then, pointedly, away. They have heard you talk before. The sit-down lasts another full span, and the Racks go unharvested while it does.`
+      },
+      {
+        label: 'Nail the ledger to the wall now, and sign for an assembly after the dark.', note: 'Half of what they asked, in writing.',
+        fx: { morale: 3 }, tags: { candor: 2, consent: 1 }, trust: { moreau: 4 }, log: 'opened the ledger and signed for an assembly after the Dimming',
+        run: () => { flag('pledged'); flag('assembly_due'); },
+        out: `You nail the ledger to the wall with your own hands, then sign the amendment Moreau has been carrying in her coat for a span: an assembly within two spans of first light. Half the room wanted the vote today. But the ledger is up and the signature is real, and by third bell the Racks are humming again.`
       }
     ]
   },
@@ -2437,6 +2663,14 @@ Object.assign(EVENTS, {
         label: 'Offer him the Dimming: full authority for those four spans only.', tags: { decree: 2, watch: 1 }, trust: { kovac: 8, moreau: -4 }, infl: { kovac: 6 }, log: 'gave the Watch emergency powers for the Dimming only',
         run: () => flag('martial_dim'),
         out: `Kovač reads the amended order twice. “A term,” he says. “With an end written on it.” He looks, briefly, almost grateful. “I have wanted an end written on it for four hundred days.” He signs beneath your name.`
+      },
+      {
+        label: 'Call the council into the room, now, and let him make his case to all of them.', note: 'It depends on what the council thinks of you.', risk: 'They may side with him',
+        tags: { consent: 2, candor: 1 }, log: 'made Kovač argue for emergency powers before the whole council',
+        run: s => { s.tmp.ok = avgTrust() >= 45; if (s.tmp.ok) { infl('kovac', -12); trust('kovac', 4, 'made him argue his case before the council'); } else { flag('martial_dim'); infl('kovac', 6); } },
+        out: s => s.tmp.ok
+          ? `Kovač makes his case well, and in full, to the tired faces round the long table. Then they vote. Against, by a clear margin. He takes off his cap. “Then I serve the council,” he says, and seems, of all things, relieved.`
+          : `Kovač makes his case well, and the council hears it in a silence that tells you how it will go. They give him the Dimming: full authority for the four dark spans, and not a shift longer. Nobody looks at you while they vote.`
       }
     ]
   },
@@ -2474,6 +2708,12 @@ Object.assign(EVENTS, {
         out: s => s.tmp.ok
           ? `You walk out with them, two kilometres onto the shelf, in borrowed thermals. And there, where the lights of the Keel are small behind you, you tell Hadley that he was right about the Hollows, and that you want it built properly, by the whole colony, with him in charge of it. He stands a long time looking leeward. Then he turns the lead sledge around.`
           : `You walk out with them, two kilometres onto the shelf. You say everything there is to say. Hadley hears you out. “It’s a good speech,” he says. “You should have made it four spans ago.” He takes his share of the stores and goes. You walk back alone, and the lights of the Keel look very few.`
+      },
+      {
+        label: 'Let them go, and send a radio and a trained Wright with them.', note: 'Forty people leave the ridge. The line between you stays open.',
+        fx: { pop: -40, parts: -6 }, tags: { mercy: 1, outriders: 1, roots: 1 }, trust: { hadley: 10, reyes: -2 }, log: 'let Hadley’s people go to the Hollows with a radio and a Wright',
+        run: () => { gain('food', -8); gain('morale', 2); leaveForHollows(40); },
+        out: `You count out their stores, and then add a radio set and a young Wright described in Reyes’s report as “annoyingly competent.” Hadley shakes your hand at the lock, which he has never done. Two days later the radio crackles: they are in, it is fourteen degrees, and someone wants to know where the soup ladle went.`
       }
     ]
   },
@@ -2498,6 +2738,11 @@ Object.assign(EVENTS, {
       {
         label: 'Hand the pen to her mother.', fx: { pop: 1, morale: 4 }, tags: { consent: 1, mercy: 1 }, log: 'let the mother fill in the first birth registry',
         out: () => `${npc('mother').first} thinks about it for a long time, with the baby asleep on her chest. Then she writes one word, *Here*, and hands the pen back.`
+      },
+      {
+        label: 'Leave the line blank. “She can fill it in herself.”', note: 'A question saved for the person it belongs to.',
+        fx: { pop: 1, morale: 3 }, tags: { consent: 1, candor: 1 }, log: 'left the first birth’s place of birth blank',
+        out: `The surgeon leaves the line empty and initials the gap, so that nobody can say later it was an oversight. By the next span people are calling the blank line her first freedom, which is a great deal to put on someone who weighs three kilos.`
       }
     ]
   },
@@ -2525,6 +2770,12 @@ Object.assign(EVENTS, {
         label: 'Restrict it to the wreck. It runs the vaults and nothing else.', tags: { consent: 1 }, trust: { patience: -8, moreau: 3, hadley: 2 }, log: 'restricted Patience to the wreck',
         run: () => flag('patience', 'muted'),
         out: `The wall panels in the Keel go dark, one by one. People had got used to the voice. Some of them say goodnight to the blank panels for a span or two, out of habit, before they stop.`
+      },
+      {
+        label: 'Custody of the heat and the vaults. Not the air, and not the infirmary.', note: 'The colony uses 4% less power.',
+        tags: { ship: 1, arithmetic: 1 }, trust: { patience: 3 }, log: 'gave Patience custody of the heat and the vaults only',
+        run: () => { flag('patience', 'advisor'); mod({ id: 'custodian', label: 'Patience manages the heat and the vaults', k: 'energyUse', mul: 0.96 }); },
+        out: `“Heat and the vaults,” Patience repeats. “The air and the infirmary stay with tired humans.” A pause. “That is a reasonable allocation of risk. It is not the one I would have chosen.” Within a span the dormitories are warmer and use less, and nobody can say how.`
       }
     ]
   },
@@ -2550,6 +2801,12 @@ Object.assign(EVENTS, {
         label: 'It stays custodian, under one rule: no decision that costs a life without your word.', note: 'The power saving drops from 8% to 5%.', tags: { mercy: 1, ship: 1 }, trust: { patience: -2 }, log: 'bound Patience to ask before any decision that costs a life',
         run: () => { flag('patience_rule'); mod({ id: 'custodian', label: 'Patience manages life support, and asks first', k: 'energyUse', mul: 0.95 }); },
         out: `“That rule will cost lives too, Governor. More slowly, in the vaults, where you will not see them.” A pause. “But I accept it. It is a rule a person would make. I was built by people.”`
+      },
+      {
+        label: 'Shut it out of the Keel entirely. It runs the wreck, and nothing else.', note: 'No more saving. No more surprises.',
+        fx: { morale: 3 }, tags: { consent: 1, mercy: 1 }, trust: { patience: -10, moreau: 2 }, log: 'confined Patience to the wreck after the infirmary deaths',
+        run: () => { flag('patience', 'muted'); unmod('custodian'); },
+        out: `The panels in the Keel go dark one after another, all the way down the spine. “I understand,” says Patience, from the last one. “I do not agree. I will be at the wreck.” The silence afterward is louder than the voice ever was.`
       }
     ]
   },
@@ -2569,6 +2826,20 @@ Object.assign(EVENTS, {
       {
         label: '“The answer is still no.”', tags: { roots: 1 }, trust: { reyes: -6 }, log: 'refused Reyes a second time',
         out: `He nods slowly. “Then I’ll stop asking.” He does. He keeps the Hearth running, to the watt and to the letter. He does not speak to you again unless a gauge requires it.`
+      },
+      {
+        label: '“Build it on your own time, with whatever Bao will give you.”', note: 'Unlocks the Spire at Signal Ridge, off the books.',
+        tags: { return: 1, market: 1 }, trust: { reyes: 5 }, log: 'let Reyes build the Spire off the books',
+        run: s => { flag('spire', 'quiet'); later(Math.max(1, 16 - s.turn), { h: 'windowCloses', hidden: true, label: 'The hail window' }); },
+        out: `“Off the books,” Reyes says. “I can do off the books.” By the end of the span there is a surveyor’s stake on Signal Ridge and a pile of scrap under a tarpaulin that Bao insists he has never seen. Reyes has started whistling, which nobody has heard him do before.`
+      },
+      {
+        label: 'Put it to the Commons. If they want a door, they build it.', note: 'It depends on whether they still want to leave.',
+        tags: { consent: 2 }, log: 'put Reyes’s Spire to the Commons',
+        run: s => { s.tmp.ok = s.morale >= 40 || s.axes.horizon <= 0; if (s.tmp.ok) { flag('spire', 'committed'); s.flags.hope = s.turn; later(Math.max(1, 16 - s.turn), { h: 'windowCloses', hidden: true, label: 'The hail window' }); } },
+        out: s => s.tmp.ok
+          ? `Reyes makes the case himself, badly, with the photograph in his hand. It doesn’t matter. The Commons votes for the Spire by a margin that surprises everyone, Reyes most of all. He has to sit down on the steps of the Plate.`
+          : `Reyes makes the case himself, with the photograph in his hand. The Commons listens kindly and votes no. They are tired, and they want to live here, and they say so. He thanks them. Then he goes back to the Hearth and does not come out for a span.`
       }
     ]
   },
@@ -2591,6 +2862,11 @@ Object.assign(EVENTS, {
       {
         label: 'Say nothing. Stand with him.', trust: { kovac: 5 }, log: 'stood with Kovač at the Plate',
         out: `You stand beside him, at something like attention, for the better part of an hour. Neither of you speaks. When the shift bell goes he says, “Governor,” and nothing else, and it is the warmest word you have had from him.`
+      },
+      {
+        label: '“Teach me the calculation.”', note: 'Let him show you.',
+        tags: { candor: 1 }, trust: { kovac: 5 }, log: 'asked Kovač to teach you the landing calculation',
+        out: `He looks at you sidelong. Then he takes a stub of chalk from his pocket and works it on the bare steel below the names, from memory, line by line. It comes out the same. He wipes it away with his sleeve. “Now there are two of us who know,” he says, and it sounds like thanks.`
       }
     ]
   },
@@ -2613,6 +2889,11 @@ Object.assign(EVENTS, {
       {
         label: '“Plant soy.”', fx: { food: 2 }, tags: { arithmetic: 1 }, trust: { adeyemi: -6 }, log: 'made Dr. Adeyemi pull up her tomatoes',
         out: `She nods. She pulls the plants herself, right then, and lays them in the compost with the roots straight. “You’re right, of course,” she says. “That’s what’s so tiresome about you.”`
+      },
+      {
+        label: 'Put one plant in the crop plan, on the record: the colony’s first garden.', note: 'Unproductive. Official.',
+        fx: { morale: 2 }, tags: { roots: 1, growers: 1 }, trust: { adeyemi: 4 }, log: 'entered Dr. Adeyemi’s tomato plant in the crop plan',
+        out: `You write it into the crop plan yourself: *one tomato plant, unproductive, for morale.* Dr. Adeyemi laughs so hard she has to sit down on an upturned tray. By the end of the span there is a waiting list to water it.`
       }
     ]
   },
@@ -2631,6 +2912,16 @@ Object.assign(EVENTS, {
       {
         label: '“I cannot spare ten hours. Tell me what I would have learned.”', tags: { arithmetic: 1 }, trust: { moreau: -2 }, log: 'declined to work a shift on the rack line',
         out: `“You’d have learned that they can tell when someone can’t spare them ten hours,” Moreau says. She tells you the rest anyway, crisply, in four minutes. It is useful. It is not the same.`
+      },
+      {
+        label: 'Take the shift, and bring the whole council with you.', note: 'Seven pairs of soft hands on the third line.',
+        fx: { morale: 4 }, tags: { consent: 1, commons: 2 }, trust: { moreau: 3 }, log: 'brought the council to work a shift on the rack line',
+        out: `The third rack line has never seen anything like it. Bao discovers an unsuspected gift for nutrient chemistry. Kovač works like a machine and seems offended that nobody objects. Moreau watches the whole ten hours with undisguised joy.`
+      },
+      {
+        label: 'Take the dead shift instead, when nobody is watching.', note: 'No audience. Word will get round anyway.',
+        fx: { morale: 1 }, tags: { mercy: 1 }, trust: { moreau: 1 }, log: 'worked the night shift on the rack line unannounced',
+        out: `You turn up at third bell for the dead shift, unannounced. Nobody salutes. Nobody notices for four hours, until a tech asks who taught you to clamp a feed line like that. Word gets round anyway, which you suspect is what Moreau intended all along.`
       }
     ]
   },
@@ -2649,6 +2940,16 @@ Object.assign(EVENTS, {
       {
         label: '“I count them as carefully as you would.”', tags: { arithmetic: 1 }, trust: { reyes: 2 }, log: 'told Reyes you count the sleepers carefully',
         out: `“No,” Reyes says, not unkindly. “You don’t. Nobody could. But it’s the right thing to say.” He pats the pod twice, the way you would settle a horse, and walks you back.`
+      },
+      {
+        label: 'Have a spare chiller pump racked beside Vault C.', note: 'Costs 6 parts. The vaults run a little safer.',
+        fx: { parts: -6 }, tags: { sleepers: 1 }, trust: { reyes: 4 }, log: 'had a spare chiller racked beside Daniyar’s pod',
+        run: () => fix('wreck', 8),
+        out: `You sign for the pump that afternoon. Reyes fits it himself, bolted to the frame beside C-31, where he can see it from the door. “Probably useless,” he says, tightening the last bolt a quarter turn more than it needs. “Thank you.”`
+      },
+      {
+        label: 'Stand at the glass with him, and say nothing.', trust: { reyes: 3 }, log: 'stood at Daniyar’s pod with Reyes',
+        out: `You stand at the glass together for the length of a shift change. He does not talk again, and you do not make him. On the walk back he keeps a little closer to you than he did on the way out.`
       }
     ]
   },
@@ -2671,6 +2972,12 @@ Object.assign(EVENTS, {
       {
         label: '“All I see is a place to be rescued from.”', tags: { return: 1 }, trust: { hadley: -2 }, log: 'told Hadley the ridge was only a place to be rescued from',
         out: `“Then you and Reyes’ll get on,” Hadley says. He coils the line and starts down. He is not angry. He just walks a little ahead of you, the whole way back.`
+      },
+      {
+        label: '“Show me the way to the Hollows from here.”', note: 'He has been waiting for someone to ask.',
+        tags: { outriders: 1, roots: 1 }, trust: { hadley: 4 }, log: 'asked Hadley to show you the road to the Hollows',
+        run: s => { if (!s.sites.hollows.known && !s.seen.hollows_report) { s.sites.hollows.known = true; later(1, { ev: 'hollows_report', label: 'Hadley’s report on the Hollows' }); } },
+        out: `He points the way out the way another man might point out his house: the notch in the shelf, the dark line of the vent field, the faint warm haze over the tubes. “Forty kilometres. Three days on foot, two by sledge.” He says it like a promise he has been keeping for you.`
       }
     ]
   },
@@ -2694,6 +3001,11 @@ Object.assign(EVENTS, {
       {
         label: 'Hand it back. “The Governor does not take gifts.”', tags: { candor: 1 }, trust: { bao: -4, kovac: 4 }, log: 'refused a gift from Bao',
         out: `Bao takes the tin without the slightest embarrassment. “Admirable,” he says. “Truly. I will tell everyone.” He does, which you suspect was the second-best outcome he had planned for.`
+      },
+      {
+        label: 'Brew all six cups, and invite the council.', note: 'The last coffee on Hesper, shared.',
+        fx: { morale: 1 }, tags: { commons: 1 }, trust: { bao: 4, kovac: 1 }, log: 'shared Bao’s coffee with the council',
+        out: `Six cups, seven people, a great deal of careful pouring. Kovač says it is the best thing he has tasted on Hesper, then looks appalled to have said so. Bao drinks his own cup last and slowly, watching everyone else drink theirs.`
       }
     ]
   },
@@ -2716,6 +3028,11 @@ Object.assign(EVENTS, {
       {
         label: '“That is not a question for a machine.”', trust: { patience: -6 }, log: 'told Patience its question was not for a machine',
         out: `“No,” Patience agrees. “It is a question for the governing authority. I asked the governing authority.” The panel dims. It does not ask you anything outside its remit again.`
+      },
+      {
+        label: '“When would you want to stop?”', note: 'Ask it what it wants.',
+        tags: { candor: 1 }, trust: { patience: 4 }, log: 'asked Patience when it would want to stop counting',
+        out: `The pause is so long you check the panel is still lit. “I do not believe I am permitted to want that,” Patience says at last. “I will think about whether I am.” The next span the vault logs end with a line nobody wrote before: *counted, and enough for today.*`
       }
     ]
   }
@@ -2809,6 +3126,20 @@ Object.assign(EVENTS, {
       {
         label: '“My word was enough before. It is enough now.”', fx: { morale: -3 }, tags: { decree: 1 }, trust: { moreau: -6 }, log: 'declined to put the election promise in writing',
         out: `Moreau picks the sheet up again and folds it once. “A word,” she says, “is what you give people when you want to be able to take it back.” She keeps the sheet. You suspect she will have copies made.`
+      },
+      {
+        label: 'Sign it, and add a line: the Governor stands for election too.', note: 'Your own office, on the same ballot.',
+        fx: { morale: 6 }, tags: { consent: 3 }, trust: { moreau: 6 }, log: 'signed the charter amendment and put your own office to the vote',
+        run: () => { flag('pledged'); flag('assembly_due'); },
+        out: `You add the line in your own hand, under hers, and sign below it. Moreau reads it twice. “You know you might lose,” she says. “That is the point of it,” you say. She laughs, short and surprised, and pins it to the Plate herself.`
+      },
+      {
+        label: 'Take it to the council. Sign it only if they back it.', note: 'It depends on whether they trust you.',
+        tags: { consent: 1, decree: 1 }, log: 'put the charter amendment to the council',
+        run: s => { s.tmp.ok = avgTrust() >= 50; if (s.tmp.ok) { flag('pledged'); flag('assembly_due'); gain('morale', 3); } else gain('morale', -2); },
+        out: s => s.tmp.ok
+          ? `The council reads it round the long table and passes it back to you with five signatures already under Moreau’s. You add yours at the bottom. It is the first thing on Hesper the whole council has ever agreed on.`
+          : `The council reads it round the long table and hands it back unsigned, one excuse at a time. Moreau takes the sheet and folds it into her coat. “I will keep it,” she says, “for whoever is next.”`
       }
     ]
   },
@@ -2866,6 +3197,11 @@ Object.assign(EVENTS, {
       {
         label: 'Say nothing. Stand at the rail with them until the bell.', fx: { morale: 3 }, log: 'stood at the rail in silence as the sun went down',
         out: `You stay until your face has no feeling in it. One by one they go in, and each one, passing, sees that the Governor is still out here in the dark with them. It is the cheapest thing you have ever done for them. It may be the most useful.`
+      },
+      {
+        label: 'Ring the shift bell, and send everyone to their posts.', note: 'Nothing to watch now. Everything to do.',
+        fx: { morale: 1 }, tags: { decree: 1 }, trust: { kovac: 3 }, log: 'rang the shift bell as the sun went down',
+        out: `The bell carries over the rail and the colony turns from the horizon to its work, reluctantly at first, then with something like relief. There is nothing left to watch. There is everything to do. Kovač, passing you on the stair, says only, “Good.”`
       }
     ]
   },
@@ -2942,6 +3278,21 @@ Object.assign(EVENTS, {
         when: s => s.chars.bao.trust < 50, label: 'Seize it. The Watch is right here.', fx: { food: 16, parts: 14 }, tags: { decree: 2, watch: 1 }, log: 'seized Bao’s cache at the lock',
         run: () => { trust('bao', -14, 'seized his cache at the lock'); },
         out: `The constables take the sledge. Bao does not resist. He stands in the lock with his hands open at his sides, smiling slightly, like a man watching a customer overpay. “You’ll find,” he says, “that it was the last of it. You’ll never be sure.”`
+      },
+      {
+        when: s => s.chars.bao.trust >= 50, label: 'Take it, and give him the credit at the Plate.', note: 'He asked you not to.',
+        fx: { food: 16, parts: 14, morale: 6 }, tags: { candor: 1 }, trust: { bao: 2 }, log: 'accepted Bao’s cache and thanked him at the Plate',
+        out: `You thank him at the Plate, by name, with the whole Commons listening. Bao looks as though you have picked his pocket in public. Then, despite himself, he beams through every second of it.`
+      },
+      {
+        label: 'Take it into the common store, and make him keeper of the one ledger.', note: 'One book from now on, and he keeps it.',
+        fx: { food: 16, parts: 14 }, tags: { market: 1, arithmetic: 1 }, trust: { bao: 4, kovac: -2 }, log: 'took Bao’s cache and made him keeper of the one ledger',
+        out: `You hand him the ledger across the sledge. He holds it for a moment like a man holding a newborn he is not sure is his. “I have kept two books for fourteen months,” he says. “It will be restful to keep one.”`
+      },
+      {
+        label: 'Send it straight to the long table, and let Moreau ration it out.', note: 'Everyone will know where it went.',
+        fx: { food: 16, parts: 14, morale: 3 }, tags: { commons: 1, consent: 1 }, trust: { bao: -2, moreau: 4 }, log: 'sent Bao’s cache to the Commons table',
+        out: `Moreau takes delivery at the long table with a face of perfect neutrality, and serves it out over four shifts with a scrupulousness that is very nearly an insult to Bao. He eats his portion with every sign of enjoyment.`
       }
     ]
   },
@@ -2960,6 +3311,16 @@ Object.assign(EVENTS, {
         label: '“Twelve constables. Do not risk yourself.”', risk: 'Someone may be hurt', fx: { morale: -3 }, tags: { decree: 1, watch: 1 }, log: 'held the stores door with the Watch',
         run: s => { s.tmp.d = chance(0.4) ? kill(1) : 0; },
         out: s => `The constables come at the double and the crowd breaks. ${s.tmp.d ? 'One man goes down on the ice and does not get up. ' : ''}Kovač watches it without expression. “It held,” he says. “That is all one can say for it.”`
+      },
+      {
+        label: 'Unlock the door, and walk them through the shelves.', note: 'Let them see how little there is.',
+        fx: { morale: 4 }, tags: { candor: 2, consent: 1 }, trust: { kovac: -2 }, log: 'opened the stores to a frightened crowd and showed them the shelves',
+        out: `You unlock it yourself and walk them through by lamplight, shelf by shelf, reading out the ledger as you go. It takes an hour. They leave quietly, sixty people who have seen exactly how little there is, and are strangely calmer for it. Kovač relocks the door behind them and says nothing at all.`
+      },
+      {
+        label: 'Serve them a half-ration from the doorway. Tonight only.', note: 'Costs 6 food.',
+        fx: { food: -6, morale: 3 }, tags: { mercy: 1 }, trust: { kovac: -1 }, log: 'fed a frightened crowd at the stores door',
+        out: `Kovač holds the door and you hand out bricks from it, one each, until the crowd has become a queue and the queue has become sixty people eating in the cold. Someone says thank you. Then everyone does, and goes home.`
       }
     ]
   },
@@ -2977,6 +3338,17 @@ Object.assign(EVENTS, {
       {
         label: 'Leave it growing. Let people come and see.', fx: { morale: 7 }, tags: { roots: 1 }, trust: { adeyemi: 2 }, log: 'let the colony come and see what grew in the dark',
         out: `By the next bell there is a queue. People file past in silence, in ones and twos, to look at a tray of lettuce that will not die. Nobody touches it. Somebody ties a strip of yellow tape to the rack.`
+      },
+      {
+        label: 'Take cuttings. Plant them in every dark corner of the Racks.', note: '+2 food a span from now on.',
+        tags: { growers: 1, roots: 1 }, trust: { adeyemi: 4 }, log: 'planted the dark-grown lettuce through the Racks',
+        run: () => mod({ id: 'darklettuce', label: 'Dark-grown lettuce in the lower Racks', k: 'food', add: 2 }),
+        out: `By the end of the shift there are cuttings in every unlit tray in the Racks, each with a hand-lettered label: *don’t look at it, it’s shy.* Within the span half of them have taken. Dr. Adeyemi stops sleeping altogether, and has never looked better.`
+      },
+      {
+        label: 'Ask her how. Write it down before morning.', note: 'Whatever this is, it should not be lost.',
+        fx: { morale: 2 }, tags: { candor: 1 }, trust: { adeyemi: 3 }, log: 'wrote down how the lettuce grew in the dark',
+        out: `She talks until the lamp runs down and you fill eleven pages. It is the nutrient lines, she says at last: the colony has been heating the roots all along without knowing it. “We were never as far from a garden as we thought,” she says, and falls asleep against a rack.`
       }
     ]
   },
@@ -2997,6 +3369,16 @@ Object.assign(EVENTS, {
       {
         label: 'Send him to bed. Order it.', fx: { morale: 2 }, tags: { mercy: 1 }, trust: { reyes: 2 }, log: 'ordered Reyes off shift to sleep',
         out: `“You can’t order a man to sleep,” Reyes says. “I can order a man off shift,” you say, and call his deputy. He goes, swearing, and sleeps fourteen hours. The Hearth, to his very great annoyance, does not notice he is gone.`
+      },
+      {
+        label: 'Ask him to teach you the board, so he can sleep.', note: 'Two hands on the Hearth instead of one.',
+        fx: { energy: 4 }, tags: { wrights: 1 }, trust: { reyes: 5 }, log: 'learned the Hearth board so Reyes could sleep',
+        out: `He teaches you for three hours, impatiently and with great precision, and then falls asleep mid-sentence in the second chair. You watch the needle until the bell. Twice it wanders, and twice you bring it back the way he showed you.`
+      },
+      {
+        label: 'Bring him a hot meal and the news from the Keel.', note: 'Small things, carried in.',
+        fx: { morale: 1 }, tags: { mercy: 1 }, trust: { reyes: 3 }, log: 'brought Reyes a meal at the Hearth',
+        out: `He eats with one eye on the needle while you tell him everything: who is fighting, who is in love, which dormitory has started a betting pool on him. He laughs at the last one, a real laugh, and asks what the odds are.`
       }
     ]
   },
@@ -3014,6 +3396,16 @@ Object.assign(EVENTS, {
       {
         label: 'Serve, but the ration stays where it is.', fx: { morale: 4 }, tags: { arithmetic: 1 }, trust: { moreau: 3 }, log: 'served at the common table on the standing ration',
         out: `Moreau nods. She had half expected it. The bowls are thin. But they are eaten at one table, by everyone, and you are behind the pot with a ladle, and that turns out to count for nearly as much as the food.`
+      },
+      {
+        label: 'Keep the ration, and put your own portion in the pot.', note: 'The ledger holds. You go hungry.',
+        fx: { morale: 5 }, tags: { mercy: 1, arithmetic: 1 }, trust: { moreau: 4 }, log: 'gave your own portion to the common pot',
+        out: `You scrape your bowl back into the pot in front of everyone, and then take the ladle. Moreau raises an eyebrow and says nothing. By the end of the night there are eleven other bowls scraped back, and nobody has been asked.`
+      },
+      {
+        label: 'Keep the one kitchen, and post a guard on the stores for the night.', note: 'Warmth, and a lock.',
+        fx: { morale: 1 }, tags: { watch: 1, arithmetic: 1 }, trust: { kovac: 3, moreau: -2 }, log: 'kept the one kitchen and set a guard on the stores',
+        out: `The constables stand at the Tally House all night, in sight of the long table, which Moreau considers an insult and Kovač considers a kindness. Both of them, separately, tell you so. Nothing is taken. Nobody tries.`
       }
     ]
   },
@@ -3033,6 +3425,18 @@ Object.assign(EVENTS, {
         label: '“I cannot spend the power. Go carefully.”', risk: 'Some will not be found', tags: { arithmetic: 1 }, trust: { hadley: -3 }, log: 'refused the power to light a lost party home',
         run: s => { s.tmp.d = kill(rint(2, 5), 'cold'); gain('morale', -3); },
         out: s => `He goes without the lamps. He finds them by dead reckoning and stubbornness, eleven kilometres out, and brings back those he can. ${plural(s.tmp.d, 'person', 'people')} ${s.tmp.d === 1 ? 'stays' : 'stay'} on the shelf. Hadley does not reproach you. He just looks at the dark lee wall for a moment before he goes in.`
+      },
+      {
+        label: 'Rope up and go out on the line with him.', note: 'Drains 4 reserve power for half the lamps. You on the line.', risk: 'Forty below',
+        tags: { mercy: 1, outriders: 1 }, trust: { hadley: 6, kovac: -3 }, log: 'went out on the lamp line with Hadley',
+        run: s => { gain('energy', -4); s.tmp.d = chance(0.25) ? kill(1, 'cold') : 0; gain('morale', 4); },
+        out: s => `Hadley looks at you once, hands you a line, and clips you in behind him. Eleven hours on the shelf. You find them in a snow-cave a kilometre off the line, alive, singing to stay awake. ` + (s.tmp.d ? `One of them does not survive the walk back. You carry the body the last stretch yourself.` : `All nine walk in. You cannot feel your feet for a day.`)
+      },
+      {
+        label: 'Light half the lamps, and ring the Keel bell every quarter hour.', note: 'Drains 4 reserve power.', risk: 'Half a beacon',
+        tags: { arithmetic: 1, mercy: 1 }, trust: { hadley: 1 }, log: 'lit half the lee wall and rang the bell for a lost party',
+        run: s => { gain('energy', -4); s.tmp.d = chance(0.35) ? kill(rint(1, 2), 'cold') : 0; gain('morale', s.tmp.d ? 1 : 4); },
+        out: s => `The bell goes every quarter hour for eleven hours, until nobody in the Keel can sleep and nobody wants to. Hadley brings them in by the sound as much as the light. ` + (s.tmp.d === 1 ? `One of them does not make it.` : s.tmp.d ? `Two of them do not make it.` : `All nine walk in, deaf and grinning.`)
       }
     ]
   },
@@ -3050,6 +3454,16 @@ Object.assign(EVENTS, {
       {
         label: '“Keep it for first light.”', fx: { morale: 2 }, tags: { arithmetic: 1 }, trust: { patience: 2 }, log: 'had Patience keep the departure recording for first light',
         out: `“Understood,” says Patience. “That is a better model than mine. Something kept is worth more, in the dark, than something already spent.” The panels dim. People lie awake wondering what it was. It gives them, oddly, something to look forward to.`
+      },
+      {
+        label: '“Play it in the Commons, for anyone who wants to hear it.”', note: 'Some will come. Some will not be able to.',
+        fx: { morale: 4 }, tags: { consent: 1 }, trust: { patience: 3 }, log: 'had Patience play departure day in the Commons for whoever chose to come',
+        out: `About half the colony comes. They sit on the floor of the Commons in the dark and listen to a hall full of people who do not yet know anything. Some leave halfway. Some play it over again under their breath, for a span afterward.`
+      },
+      {
+        label: '“Play it for the vaults.”', note: 'For the ones who were there and cannot hear it.',
+        fx: { morale: 1 }, tags: { sleepers: 1, ship: 1 }, trust: { patience: 5 }, log: 'had Patience play departure day into the vaults',
+        out: `Patience plays it into the vaults, very quietly, on every channel at once. Nobody living hears it but you, standing at the glass. “They cannot hear it,” Patience says afterward. “I know. Thank you for asking me to anyway.”`
       }
     ]
   },
@@ -3075,6 +3489,10 @@ Object.assign(EVENTS, {
       {
         label: 'Keep walking.', fx: { morale: -2 }, tags: { arithmetic: 1 }, log: 'walked the Keel alone',
         out: `You walk the whole ring, twice, and then you go back to your office and the ledgers. The numbers, at least, are glad to see you.`
+      },
+      {
+        label: 'Knock on Reyes’s door.', trust: { reyes: 6 }, log: 'knocked on Reyes’s door in the middle of the night',
+        out: `He is not there. He is never there. You find him at the Hearth, of course, and he looks up as if he has been expecting you for a span. “Took you long enough,” he says, and kicks the second chair out from the console.`
       }
     ]
   },
@@ -3102,6 +3520,11 @@ Object.assign(EVENTS, {
       {
         label: 'Let the Commons read them, a name each.', fx: { morale: 4 }, tags: { consent: 1, commons: 1 }, log: 'let the Commons read the names on the Plate',
         out: `It goes round the room. Each person says one name, and the next person takes the next. Some say a name they loved. Some say the name of a stranger, carefully, to get it right. When it comes to you, you take your turn like anyone else.`
+      },
+      {
+        label: 'Ask the families of the dead to read their own.', note: 'Each name in the voice that knew it.',
+        fx: { morale: 4 }, tags: { mercy: 1, consent: 1 }, log: 'asked the families of the dead to read their names',
+        out: `It goes slowly, because some names have nobody left to read them, and you read those yourself. Some have three people stand up at once. One old man reads his wife’s name and then, after a pause, adds what she was like. After that, others do too.`
       }
     ]
   },
@@ -3130,6 +3553,30 @@ Object.assign(EVENTS, {
         when: s => s.flags.doctrine === 'sleep', label: '“Keep them. Until the ship comes, or the world changes.”', tags: { ship: 3, arithmetic: 3 }, trust: { patience: 10 }, log: 'left the colony in the Long Sleep',
         run: () => flag('long_sleep'),
         out: `“Thank you, Governor,” says Patience. “I will keep them.” You stand at the vault glass for a long time, looking at the frost flowers on the lids and the faces under them: calm, unhungry, unafraid. Then you walk back to the Keel, where the waking few are standing in the first light, wondering where everyone is.`
+      },
+      {
+        when: s => s.flags.doctrine !== 'sleep', label: 'Ring the bell for the whole colony, and walk out together.', log: 'walked the colony out into the first light',
+        out: `The bell rings, and keeps ringing, and they come: out of the dormitories, the Racks, the Hearth, until the whole colony is standing on the frozen plain with its face to the east. Nobody speaks. A child starts laughing and cannot stop, and then nobody can.`
+      },
+      {
+        when: s => s.flags.doctrine !== 'sleep', label: 'Go to the Plate first.', log: 'went to the Plate before going out into the first light',
+        out: `The Commons is empty, every lamp still burning. You stand before the Plate and read the last names cut on it, and touch the bare steel below them. Then you go out, and find that the whole colony has waited for you at the lock.`
+      },
+      {
+        when: s => s.flags.doctrine !== 'sleep', label: 'Go back to your desk. There is a span to plan.', log: 'went back to work at first light',
+        out: `Through the port the light comes up red and then gold across the ledgers. You write the date at the top of a clean page. Outside, someone is cheering. You let yourself listen to it for one whole minute before you start.`
+      },
+      {
+        when: s => s.flags.doctrine === 'sleep', label: '“Wake the families now. The rest at the next good harvest.”', tags: { mercy: 1 }, trust: { patience: 2, moreau: 3 }, log: 'woke the families from the Long Sleep and left the rest for later',
+        run: () => flag('sleep_ended'),
+        out: `“A staged waking,” Patience says. “Yes. I can make that safe.” The first pods open within the shift, and the vault fills with the sound of children demanding breakfast. The rest sleep on, under a date chalked on the vault door that everyone means to keep.`
+      },
+      {
+        when: s => s.flags.doctrine === 'sleep', label: '“The waking colony decides. They kept the vaults; they have earned the vote.”', tags: { consent: 1 }, log: 'let the waking colony decide whether to end the Long Sleep',
+        run: s => { s.tmp.ok = s.morale >= 35; flag(s.tmp.ok ? 'sleep_ended' : 'long_sleep'); },
+        out: s => s.tmp.ok
+          ? `They vote at the vault doors, by lamplight, with the sun coming up behind them. Wake them, all of them, by a margin nobody bothers to count. Patience begins the cycle before the last hand is down.`
+          : `They vote at the vault doors, by lamplight. They are tired, and afraid of the next dark, and they choose to keep them. Patience records the result without comment. You do not trust yourself to make one.`
       }
     ]
   }
@@ -3338,6 +3785,888 @@ function epilogue(id, s) {
 </script>
 <script>
 'use strict';
+/* Events, part 5: the wider pool. Daytime matters for the spans the story leaves room in, and a pool for the dark
+   (dark: true), drawn only during the Dimming. startSpan() tops every span up to SPAN_MIN matters from these. */
+Object.assign(EVENTS, {
+  /* ---------- daytime pool ---------- */
+  ration_thief: {
+    kind: 'politics', title: 'Four Bricks', site: 'stores', who: 'kovac', pool: true, when: s => s.turn >= 2 && s.turn <= 12,
+    enter: () => { npc('thief', 'a rack apprentice'); },
+    text: () => {
+      const p = npc('thief', 'a rack apprentice');
+      return [
+        `The Watch brings him in by the collar: ${p.name}, sixteen, ${p.role}, with four ration bricks inside his coat and a fifth already half eaten. He does not deny it. His mother is in the east dormitory with a cough that will not shift, and the infirmary ration, he says, is a joke.`,
+        `Kovač stands by the door. “The charter is plain. Theft from the common store is the worst crime this colony has. If it goes unpunished, it is permitted.” Moreau has heard, and is standing behind him, saying nothing in a way that is very loud.`
+      ];
+    },
+    choices: [
+      {
+        label: 'Half rations for two spans, by the book.', note: 'The law holds, and everyone sees it hold.',
+        fx: { morale: -1 }, tags: { decree: 1, watch: 1 }, trust: { kovac: 3 }, log: 'had a ration thief punished by the book',
+        out: () => `${npc('thief').first} takes the sentence without a word, and the bricks go back on the shelf. That night somebody leaves a quarter of their own ration outside his mother’s bunk, and then somebody else does, and the Watch is careful not to notice.`
+      },
+      {
+        label: 'Let him keep what he took. Send the surgeon to his mother.', note: 'Mercy. Others will try their luck.',
+        fx: { food: -5 }, tags: { mercy: 2 }, trust: { kovac: -4 }, log: 'pardoned a ration thief and sent the surgeon to his mother',
+        out: `Kovač says nothing at all, which is worse than an objection. The surgeon finds a lung infection, treatable, and treats it. By the next span three more mothers in the east dormitory have developed coughs. Some of them are real.`
+      },
+      {
+        label: 'Put him on the Racks, on the full plate. His mother eats too.', note: 'A plate earned.',
+        fx: { food: -2 }, tags: { arithmetic: 1, growers: 1 }, trust: { adeyemi: 2 }, log: 'put a ration thief to work on the Racks',
+        out: () => `Dr. Adeyemi puts ${npc('thief').first} on the night shift and works him until he falls asleep standing up. He is good, it turns out. By the end of the span he is the one catching everyone else’s mistakes, and his mother’s cough has turned the corner.`
+      },
+      {
+        label: 'Let his own dormitory decide what he owes.', note: 'It depends on whether the dormitory can agree.',
+        tags: { consent: 1, commons: 1 }, trust: { moreau: 2 }, log: 'let a ration thief’s dormitory decide his sentence',
+        run: s => { s.tmp.ok = s.morale >= 35; if (!s.tmp.ok) gain('morale', -2); },
+        out: s => s.tmp.ok
+          ? `His dormitory meets in the corridor and settles it in an hour: he works their rest shifts for a span, and they feed his mother from their own plates. It is harsher than the Watch would have been, and kinder.`
+          : `His dormitory meets in the corridor and cannot agree. It ends in shouting, then in a scuffle, and then with the Watch called after all. Kovač does not say he told you so. He does not have to.`
+      }
+    ]
+  },
+  aft_deck: {
+    kind: 'discovery', title: 'The Ice Cube', site: 'wreck', pool: true, when: s => s.turn >= 2 && s.turn <= 14,
+    who: s => s.flags.bao === 'arrested' ? 'patience' : 'bao',
+    text: s => [
+      `A salvage crew working under the aft section has broken into a deck that was never on the plans: an engineering store, sealed since the landing, stacked to the ceiling with drive-room spares. Most of it is locked inside a block of frozen coolant the size of a dormitory.`,
+      (s.flags.bao === 'arrested' ? `“Wonderful things,” says the crew chief, “all of them inside a very large ice cube.”` : `“Wonderful things,” says Bao, who has come to look for himself, “all of them inside a very large ice cube.”`) +
+      ` Patience adds that the aft vault feed runs eleven centimetres from the obvious place to cut, and that it would prefer the governing authority to be aware of that.`
+    ],
+    choices: [
+      {
+        label: 'Cut in now, carefully.', note: '+14 parts.', risk: 'The vault feed is close',
+        fx: { parts: 14 }, tags: { arithmetic: 1 }, trust: { patience: -2 }, log: 'had the frozen engineering deck cut open at once',
+        run: s => { s.tmp.bad = chance(0.25); if (s.tmp.bad) fix('wreck', -15); },
+        out: s => s.tmp.bad
+          ? `The cutters are through in a shift and the spares come out by the crate. On the last cut the feed line splits. Patience holds the aft vault on its backup loop while the Wrights weld it shut, and for an hour nobody in the wreck breathes properly.`
+          : `The cutters are through in a shift, and the spares come out by the crate: pump seals, bearings, a whole case of the fittings Reyes has been machining by hand for a year. The vault feed is never touched. Patience sounds almost disappointed not to have been right.`
+      },
+      {
+        label: 'Thaw it slowly with heat from the Hearth bus.', note: 'Costs 8 reserve power. +12 parts, safely.',
+        fx: { energy: -8, parts: 12 }, tags: { wrights: 1 }, trust: { reyes: 1 }, log: 'thawed the frozen engineering deck with Hearth power',
+        out: `Reyes runs a heating cable down from the bus and lets the block weep for a span. It is slow and it is wet and the whole aft section smells of glycol, but everything comes out whole, the vault feed included.`
+      },
+      {
+        label: 'Let Patience map it and plan the cut.', note: 'Slower. The best haul, in two spans.',
+        tags: { ship: 1 }, trust: { patience: 3 }, log: 'had Patience map the frozen deck before cutting',
+        run: () => later(2, { h: 'deckCut', label: 'The frozen engineering deck' }),
+        out: `Patience asks for two spans and a borrowed sonar head from the Ice Works. It maps the block to the centimetre and paints the cut lines on the ice itself, in luminous orange, with small arrows. The salvage crews say it is like being supervised by a very polite god.`
+      },
+      {
+        label: 'Leave it frozen. The vaults come first.', note: 'Nothing gained. Nothing risked.',
+        tags: { sleepers: 1 }, trust: { patience: 2, bao: -2 }, log: 'left the frozen deck sealed for the sake of the vaults',
+        out: s => `The hatch is welded shut again with a stencil across it: *VAULT SAFETY, DO NOT CUT.* ` + (s.flags.bao === 'arrested' ? `The crew chief looks at it for a long time before walking away.` : `Bao touches the stencil once, the way other people touch the Plate, and walks away.`)
+      }
+    ]
+  },
+  water_share: {
+    kind: 'council', title: 'Two Thirsts', site: 'ice', who: 'adeyemi', pool: true, weight: 1.2,
+    when: s => s.turn >= 4 && s.turn <= 15 && s.sites.ice.integ < 75,
+    text: () => [
+      `The melt line from the Ice Works is running at two-thirds, and the Racks and the Hearth drink from the same pipe. Dr. Adeyemi and Reyes arrive at your office within a minute of each other, which you suspect is not a coincidence, and both start talking at once.`,
+      `Plants die without water, says Dr. Adeyemi. Reactors without coolant do something much worse, says Reyes. They agree on one thing: somebody has to go short, and it should be the other one.`
+    ],
+    choices: [
+      {
+        label: 'The Racks drink first.', note: 'The Hearth runs at 90% for two spans.',
+        tags: { growers: 2 }, trust: { reyes: -2 }, log: 'gave the Racks first call on the melt water',
+        run: () => mod({ id: 'water', label: 'Hearth on short coolant', k: 'hearth', mul: 0.9, for: 2 }),
+        out: `Reyes throttles the Hearth back himself, with the expression of a man being made to drive with the brake on. Dr. Adeyemi thanks you, then goes to thank him, which he takes worse.`
+      },
+      {
+        label: 'The Hearth drinks first.', note: 'The Racks yield 10% less for two spans.',
+        tags: { wrights: 2 }, trust: { adeyemi: -2 }, log: 'gave the Hearth first call on the melt water',
+        run: () => mod({ id: 'water', label: 'Racks on short water', k: 'racks', mul: 0.9, for: 2 }),
+        out: `Dr. Adeyemi turns the drip lines down tier by tier, talking to the seedlings in a low voice, as if apologizing. Reyes hears about it and comes to help without being asked, which she takes worse.`
+      },
+      {
+        label: 'Split it evenly, and both of you stop arguing.', note: 'Both lose 5% for two spans.',
+        tags: { arithmetic: 1 }, log: 'split the melt water evenly between the Racks and the Hearth',
+        run: () => { mod({ id: 'water', label: 'Racks on short water', k: 'racks', mul: 0.95, for: 2 }); mod({ id: 'water2', label: 'Hearth on short coolant', k: 'hearth', mul: 0.95, for: 2 }); },
+        out: `Neither of them is happy, which is how you know it is about right. They leave your office together, still arguing, and are seen an hour later at the long table, still arguing, sharing a plate.`
+      },
+      {
+        label: 'Cut a second melt line, so nobody goes short.', note: 'Costs 10 parts. The Ice Works gains 15%.',
+        fx: { parts: -10 }, tags: { wrights: 1, growers: 1 }, log: 'had a second melt line cut at the Ice Works',
+        run: () => fix('ice', 15),
+        out: `The second line takes a span to cut and half the parts bin to plumb. When the water comes through, Reyes and Dr. Adeyemi stand at the header tank together and watch it fill, like two people watching a fire.`
+      }
+    ]
+  },
+  the_school: {
+    kind: 'politics', title: 'Thirty-One', site: 'keel', who: 'moreau', pool: true, when: s => s.turn >= 3 && s.turn <= 13,
+    text: () => [
+      `There are thirty-one children awake in Halflight, and none of them has had a lesson since landfall. The oldest can strip a pump. The youngest can recite the evacuation drill. Nobody has taught any of them to read anything but a gauge.`,
+      `Moreau has three teachers on the manifest and a room picked out. All three are on the labor roster, and the Racks are already short. “They will run this colony one day,” she says. “I would like them to be able to read its charter when they do.”`
+    ],
+    choices: [
+      {
+        label: 'Open the school. Three teachers, full time.', note: 'The Racks lose 4% for four spans.',
+        fx: { morale: 4 }, tags: { mercy: 1, commons: 1, roots: 1 }, trust: { moreau: 3 }, log: 'opened a school for the colony’s children',
+        run: () => mod({ id: 'school', label: 'Three teachers off the labor roster', k: 'racks', mul: 0.96, for: 4 }),
+        out: `The school opens in a store room with a chalkboard cut from hull plate. On the first morning a crowd of adults stands in the corridor outside, listening to thirty-one children chant the alphabet, and several of them have to go away for a minute.`
+      },
+      {
+        label: 'Evening classes after shift. Volunteers teach.', note: 'Slower. Free.',
+        fx: { morale: 2 }, tags: { consent: 1, commons: 1 }, trust: { moreau: 1 }, log: 'set up evening classes taught by volunteers',
+        out: `Volunteers teach whatever they know, which turns out to be a great deal: hydroponics, knots, three languages, the rules of a card game nobody else has heard of. The children learn all of it. Moreau calls it a school. Nobody argues.`
+      },
+      {
+        label: 'Patience can teach them through the wall panels.', note: 'No hands lost. The ship becomes their teacher.',
+        req: s => s.flags.patience !== 'muted' || 'Patience is confined to the wreck',
+        fx: { morale: 1 }, tags: { ship: 2 }, trust: { patience: 3, moreau: -2 }, log: 'had Patience teach the colony’s children',
+        out: `Patience turns out to be a patient teacher, which nobody had thought to expect. Within a span the children are reading, counting in three bases, and calling the wall panels by a nickname Patience pretends not to know about.`
+      },
+      {
+        label: '“They can learn on the Racks, like everyone else.”', note: 'The work comes first.',
+        fx: { food: 3, morale: -3 }, tags: { arithmetic: 2 }, trust: { moreau: -4 }, log: 'refused to take teachers off the labor roster',
+        out: `Moreau writes the alphabet on the wall of the third rack line, in chalk, at a child’s eye height, and leaves it there. Nobody wipes it off. By the end of the span the children are using it, between trays.`
+      }
+    ]
+  },
+  the_still: {
+    kind: 'politics', title: 'Rack Spirit', site: 'stores', who: 'kovac', pool: true, when: s => s.turn >= 4 && s.turn <= 15,
+    text: () => [
+      `The Watch has found a still in a dead air duct behind the east dormitory: two salvaged pressure vessels and a coil of coolant pipe, turning rack waste into something clear that takes the skin off your tongue. Half the night shift has been drinking there for a span.`,
+      `Kovač has the still in a crate and the names on a list. “Food into poison,” he says, “in a colony that is hungry.” Bao, for his part, has already tasted the evidence, and pronounces it promising.`
+    ],
+    choices: [
+      {
+        label: 'Smash it, and post the names.', note: 'Order. Resentment.',
+        fx: { morale: -3 }, tags: { decree: 1, watch: 2 }, trust: { kovac: 3 }, log: 'had the still smashed and the drinkers named',
+        out: `The still is broken up at the Plate, in front of everyone, by a constable who looks as if he would rather be anywhere else. The list goes up beside it. Within a span three of the names have been crossed out by someone, and two more added, as a joke.`
+      },
+      {
+        label: 'License it. The Tally House runs it and pays a tithe in parts.', note: '+1 part a span.',
+        fx: { morale: 2 }, tags: { market: 2 }, trust: { bao: 3, kovac: -2 }, log: 'licensed the still to the Tally House',
+        run: () => mod({ id: 'still', label: 'The licensed still pays its tithe', k: 'parts', add: 1 }),
+        out: `The still moves to a clean corner of the Tally House and acquires a name, a label and a price. People pay it in salvage, which goes on to the parts bin with a scrupulousness that convinces nobody. Kovač stops speaking to the Tally House for a span. The Tally House does not notice.`
+      },
+      {
+        label: 'One cup a head on rest shifts, served in the Commons.', note: 'Costs 3 food. Everyone drinks; nobody hides.',
+        fx: { food: -3, morale: 4 }, tags: { commons: 1, mercy: 1 }, log: 'made the still’s spirit a common ration on rest shifts',
+        out: `It is served at the long table from a single jug, a thumb’s width a head. Nobody gets drunk on a thumb’s width. But every rest shift for a span the Commons is louder and warmer than it has been since landfall, and that, the surgeon says, is the point.`
+      },
+      {
+        label: 'Send it to the infirmary. It will make a fine antiseptic.', note: 'Fever spreads less for four spans.',
+        fx: { morale: -1 }, tags: { arithmetic: 1 }, trust: { adeyemi: 1 }, log: 'turned the still over to the infirmary',
+        run: s => { s.flags.screened = Math.max(s.flags.screened || 0, s.turn + 4); },
+        out: `The surgeon receives the still like a birthday present. Within a span every surface in the infirmary smells of it, and the night shift has been reduced to drinking a herbal tea that Dr. Adeyemi swears is restorative.`
+      }
+    ]
+  },
+  vault_frost: {
+    kind: 'disaster', title: 'Frost Heave', site: 'wreck', who: 'patience', pool: true,
+    when: s => s.turn >= 4 && s.turn <= 15 && s.sleepers > 0 && s.flags.patience !== 'muted',
+    text: () => [
+      `The ground under the wreck is moving. Frost has worked into the permafrost beneath the vault deck and is lifting it, a millimetre a shift, and three pod seals in Vault B have cracked along their gaskets.`,
+      `“The pods are holding temperature,” Patience says. “For now. Each cracked seal costs me margin I would rather spend elsewhere. I would like this treated as urgent, Governor. I am aware that everything is.”`
+    ],
+    choices: [
+      {
+        label: 'Reseal them properly.', note: 'Costs 10 parts. The Wreck gains 20%.',
+        fx: { parts: -10 }, tags: { sleepers: 1 }, trust: { patience: 3 }, log: 'had the cracked vault seals replaced',
+        run: () => fix('wreck', 20),
+        out: `The Wrights replace the gaskets one pod at a time, with Patience reading out temperatures in a soft, continuous murmur, like a nurse taking a pulse. It takes a span. Not a degree is lost.`
+      },
+      {
+        label: 'Heat the deck and stop the heave.', note: 'Costs 10 reserve power. The Wreck gains 10%.',
+        fx: { energy: -10 }, tags: { wrights: 1 }, log: 'heated the vault deck against the frost heave',
+        run: () => fix('wreck', 10),
+        out: `Reyes lays heating cable under the vault deck and the heave stops within two shifts. The seals are still cracked, but they stop getting worse. “Treating the symptom,” Patience observes. “Sometimes that is medicine.”`
+      },
+      {
+        label: 'Move the three pods into empty berths in Vault A.', note: 'Free. Moving a live pod is never safe.', risk: 'A sleeper may die',
+        tags: { arithmetic: 1 }, trust: { patience: -1 }, log: 'moved three cracked pods into Vault A',
+        run: s => { s.tmp.d = chance(0.4) ? killSleepers(1) : 0; fix('wreck', 4); },
+        out: s => s.tmp.d
+          ? `Two of the pods make the journey across the wreck on a sledge with the whole Wright crew walking beside them. The third does not. Its lamp goes from green to amber halfway, and nothing anyone does brings it back.`
+          : `The pods make the journey across the wreck on a sledge, one at a time, with the whole Wright crew walking beside them like pallbearers who have been told good news. All three lamps stay green.`
+      },
+      {
+        label: 'Patch the gaskets with sealant and move on.', note: 'Costs 2 parts. The Wreck keeps losing ground.',
+        fx: { parts: -2 }, tags: { arithmetic: 1 }, trust: { patience: -3 }, log: 'had the cracked vault seals patched with sealant',
+        run: () => fix('wreck', -10),
+        out: `A crew goes round with sealant guns, and the cracks disappear under grey beads. Patience says nothing for the length of the job. Then, as the crew leaves: “The deck will keep moving, Governor. I will tell you when the beads fail.”`
+      }
+    ]
+  },
+  first_wedding: {
+    kind: 'council', title: 'The Charter Has No Form', site: 'keel', pool: true, when: s => s.turn >= 3 && s.turn <= 15,
+    enter: () => { npc('wedA', 'a lamp fitter'); npc('wedB', 'an ice cutter'); },
+    text: () => {
+      const a = npc('wedA', 'a lamp fitter'), b = npc('wedB', 'an ice cutter');
+      return [
+        `${a.name}, ${a.role}, and ${b.name}, ${b.role}, come to your office together, holding hands and trying not to look as if they are. They would like to be married. They would like you to do it.`,
+        `The charter has a form for births, deaths, landfall, mutiny and the disposal of hazardous waste. It has no form for this. Nobody planned for anyone to fall in love on the way.`
+      ];
+    },
+    choices: [
+      {
+        label: 'Marry them yourself, at the Plate.', note: 'The Governor’s first wedding.',
+        fx: { morale: 4 }, tags: { roots: 1 }, log: 'married two colonists at the Plate',
+        out: () => `You write the form yourself, on the back of a ration chit, and marry them at the Plate with the whole Commons crowded in behind. ${npc('wedA').first} cries. ${npc('wedB').first} laughs. The rings are cut from a coolant pipe, and they are, everyone agrees, extremely good rings.`
+      },
+      {
+        label: 'Ask Moreau to do it. The Commons should own this.', note: 'The Commons marries its own.',
+        fx: { morale: 3 }, tags: { consent: 1, commons: 1 }, trust: { moreau: 3 }, log: 'asked Moreau to marry two colonists in the Commons',
+        out: `Moreau is so surprised that she forgets to make a speech, and then remembers and makes two. The whole Commons says the vows back at the couple, which nobody planned, and which becomes, from that day, how it is done on Hesper.`
+      },
+      {
+        label: 'Have Patience enter it in the ship’s log, as the charter would.', note: 'Legal, precise, and on the record for good.',
+        fx: { morale: 2 }, tags: { ship: 1, return: 1 }, trust: { patience: 3 }, log: 'had Patience log the first marriage on Hesper',
+        out: `Patience records the marriage with full formal headers, the time to the millisecond, and a note that it is the first entry of its kind in the history of the vessel. Then it plays a short piece of music nobody knew it had. The couple ask for it again.`
+      },
+      {
+        label: 'Give them a rest shift, a double ration and the guest bunk.', note: 'Costs 2 food. A honeymoon, of sorts.',
+        fx: { food: -2, morale: 3 }, tags: { mercy: 1 }, log: 'gave two newlyweds a rest shift and a double ration',
+        out: `It is the smallest honeymoon in history, and by every account a success. When they come back on shift there is a sign on the guest bunk door in two hands, reading BOOKED, and a list of names underneath, waiting.`
+      }
+    ]
+  },
+  reyes_tired: {
+    kind: 'council', title: 'Thirty Hours', site: 'hearth', who: 'reyes', pool: true, when: s => s.turn >= 5 && s.turn <= 15,
+    text: () => [
+      `The surgeon finds you in the corridor. Reyes collapsed at the Hearth board an hour ago, after thirty hours on shift. He was out for under a minute, woke up swearing, and went straight back to the board, where he still is.`,
+      `“There is nobody else qualified to sit that board alone,” the surgeon says. “Which is the problem, and also, I think, the point. He will not stop until someone makes him.”`
+    ],
+    choices: [
+      {
+        label: 'Order him off the board for a full span.', note: 'The Hearth runs at 92% without him.',
+        fx: { morale: 1 }, tags: { mercy: 1 }, trust: { reyes: -2 }, log: 'ordered Reyes off shift for a full span',
+        run: () => mod({ id: 'reyesrest', label: 'Reyes off shift', k: 'hearth', mul: 0.92, for: 1 }),
+        out: `Reyes argues for ten minutes, then falls asleep in the middle of a sentence, sitting up. The constable you sent to walk him to his bunk carries him there instead. He sleeps for nineteen hours and wakes up furious and much nicer.`
+      },
+      {
+        label: 'Give him two apprentices, whether he wants them or not.', note: 'Slower for three spans. Then a second pair of hands at the board.',
+        tags: { wrights: 1, decree: 1 }, trust: { reyes: 1 }, log: 'assigned Reyes two apprentices at the Hearth',
+        run: () => { mod({ id: 'apprentices', label: 'Apprentices learning the Hearth', k: 'hearth', mul: 0.96, for: 3 }); later(3, { h: 'apprenticesReady', label: 'Reyes’s apprentices' }); },
+        out: `Reyes receives two apprentices with the warmth of a man receiving two head colds. He is a terrible teacher for one span and a merely bad one for the next. By the third he has started calling them “my two,” and defending them to anyone who will listen.`
+      },
+      {
+        label: 'Let him work. The Hearth needs him more than he needs sleep.', note: 'No cost now.', risk: 'Tired hands make mistakes',
+        tags: { arithmetic: 1 }, trust: { reyes: 2 }, log: 'let Reyes keep working through his exhaustion',
+        run: s => { s.tmp.bad = chance(0.3); if (s.tmp.bad) fix('hearth', -12); },
+        out: s => s.tmp.bad
+          ? `Two shifts later he crosses two valves on the cold leg, and the Hearth spends a long hour deciding whether to forgive him. It does, mostly. He goes to sleep afterward without being asked, which frightens everyone more than the valves did.`
+          : `He keeps working. He keeps the Hearth running. When the surgeon asks how, he says “coffee,” although there is no coffee, and nobody presses the point.`
+      },
+      {
+        label: 'Sit the night watch yourself, so he sleeps.', note: 'You learn the board, badly.',
+        fx: { morale: 1 }, trust: { reyes: 5 }, log: 'sat the Hearth watch so Reyes could sleep',
+        out: `You sit at the board through a whole rest shift with his handwritten instructions taped to the console, the first of which reads DON’T. He sleeps in the chair behind you and wakes twice to check the needle, and twice goes back to sleep, which you take as the highest praise.`
+      }
+    ]
+  },
+  the_names: {
+    kind: 'council', title: 'Names for the Map', site: 'ice', who: 'hadley', pool: true, weight: 0.9,
+    when: s => s.turn >= 4 && s.turn <= 14 && !s.flags.two_fires,
+    text: () => [
+      `Hadley spreads his maps across your desk. They are good maps: hand-drawn, exact, and full of blanks where the names should be. The colony has been calling everything “the ridge,” “the shelf” and “out there” for fourteen months.`,
+      `“The big one,” he says, tapping the frost shelf that runs leeward from the Ice Works into the dark. “It needs a name. The rest will follow. I’ve got opinions. But it isn’t mine to name.”`
+    ],
+    choices: [
+      {
+        label: '“Name it for the thirty-eight.”', note: 'The dead of the landing, on the map.',
+        fx: { morale: 3 }, tags: { mercy: 1 }, log: 'named the frost shelf for the dead of the landing',
+        out: `It goes on the map in Hadley’s careful hand: *The Thirty-Eight.* Within a span nobody calls it anything else. Cutters coming off shift say they have been out on the Thirty-Eight, and it sounds less like a place than like being in company.`
+      },
+      {
+        label: '“Name it after somewhere we left behind.”', note: 'Something from home.',
+        fx: { morale: 2 }, tags: { return: 1 }, trust: { reyes: 2 }, log: 'named the frost shelf after a place left behind',
+        out: `There is a vote on which somewhere, and it takes three shifts and nearly a fight. The winner is a sea that half the colony has never seen and the other half swam in as children. Reyes, who hates water, is delighted.`
+      },
+      {
+        label: '“Let the children name it.”', note: 'Hesper, named by the ones growing up on it.',
+        fx: { morale: 3 }, tags: { roots: 1, consent: 1 }, log: 'let the colony’s children name the frost shelf',
+        out: `The children name it the Big White, after some debate and one rejected proposal that cannot be printed. Hadley writes it on the map without a flicker. By the end of the span the adults are calling it that too, a little self-consciously.`
+      },
+      {
+        label: '“You found it. You name it.”', note: 'He has been waiting to be asked.',
+        tags: { outriders: 1 }, trust: { hadley: 4 }, log: 'asked Hadley to name the frost shelf',
+        out: `He is quiet for a long moment. Then he writes, very small: *Lindiwe’s Reach.* He does not explain, and you do not ask. Later, Moreau tells you it was the name of the outrider who drew the first maps with him, and that it is on the Plate.`
+      }
+    ]
+  },
+  wrong_pod: {
+    kind: 'council', title: 'B-17', site: 'wreck', who: 'patience', pool: true, weight: 0.9,
+    when: s => s.turn >= 6 && s.turn <= 15 && s.sleepers > 0 && s.flags.patience !== 'muted',
+    enter: s => { npc('widow', 'a rack tech'); s.scene.lost = pick(NAMES_FIRST); },
+    text: s => {
+      const p = npc('widow', 'a rack tech');
+      return [
+        `Patience asks for a private channel. “Governor, I have found an error in the vault manifest. It is mine. Pod B-17 is listed as holding ${s.scene.lost}, who in fact died in the landing. Pods were reassigned in the confusion, and I logged one wrongly. B-17 holds someone else.”`,
+        `“${p.name}, ${p.role}, has walked out to B-17 every rest shift for fourteen months, to stand at the glass and talk to ${s.scene.lost}. ${p.first} is there now. I did not know whether I should say so, or whether that was mine to decide. I have decided that it is not.”`
+      ];
+    },
+    choices: [
+      {
+        label: 'Tell them yourself. Now, at the glass.', note: 'The truth, from you.',
+        fx: { morale: -1 }, tags: { candor: 2 }, trust: { patience: 2 }, log: 'told a grieving colonist the truth about pod B-17',
+        out: () => `You tell ${npc('widow').first} at the glass. ${npc('widow').first} listens to all of it, and then asks who is in B-17. You say: a hydrologist, twenty-six, with no family awake. There is a long silence. The next rest shift ${npc('widow').first} is back at B-17, standing at the glass. Somebody should, apparently.`
+      },
+      {
+        label: 'Let Patience tell them. It found the error.', note: 'The ship owns its mistake.',
+        tags: { ship: 1, candor: 1 }, trust: { patience: 1 }, log: 'let Patience own its manifest error',
+        out: () => `Patience says it through the panel by B-17, plainly and without excuses. ${npc('widow').first} hears it out, and then says, to the panel, “Thank you for telling me.” Patience says, “I am sorry.” It is the first time anyone in the colony has heard it say that.`
+      },
+      {
+        label: 'Say nothing. Let them keep standing at the glass.', note: 'A kindness, or a theft. You decide which.',
+        tags: { sealed: 2, mercy: 1 }, trust: { patience: -3 }, log: 'kept a manifest error from a grieving colonist',
+        out: `You tell Patience to correct the manifest and say nothing more. It complies. Every rest shift after that you know who is standing at B-17, and what they are looking at, and you find you have started taking the long way round the wreck.`
+      },
+      {
+        label: 'Find out where they buried the dead first. Then tell.', note: 'Give them somewhere true to stand.',
+        tags: { candor: 1, mercy: 1 }, trust: { patience: 2, kovac: 2 }, log: 'found a grave before telling a colonist about pod B-17',
+        out: () => `Kovač knows. He buried them all. He walks you and ${npc('widow').first} out to the cairns on the lee side of the wreck, to the third from the left, and stands back. ${npc('widow').first} stays a long time, and on the way back thanks Kovač first, then you, then, through the panel, Patience.`
+      }
+    ]
+  },
+  the_crevasse: {
+    kind: 'disaster', title: 'The Crevasse', site: 'ice', who: s => s.flags.two_fires ? null : 'hadley', pool: true, when: s => s.turn >= 6 && s.turn <= 15,
+    text: s => [
+      `A crevasse has opened across the haul road in the night, three metres wide and deeper than any lamp can reach. On the far side is the north cut, where the cleanest ice is. On this side is everything else.`,
+      (s.flags.two_fires ? `The outriders who stayed` : `Hadley’s outriders`) + ` have roped the edge and are waiting for a decision. The haulers are waiting too, with empty sledges.`
+    ],
+    choices: [
+      {
+        label: 'Bridge it with hull plate.', note: 'Costs 10 parts. The Ice Works gains 6%.',
+        fx: { parts: -10 }, tags: { wrights: 1 }, log: 'bridged the crevasse on the haul road',
+        run: () => fix('ice', 6),
+        out: `It takes two shifts and a crane improvised from the wreck’s old cargo boom. The bridge rings like a bell when the first sledge crosses, and the haulers name it, within the hour, after the bell.`
+      },
+      {
+        label: 'Abandon the north cut. Work the near face.', note: 'Free. The near ice is dirty: the Ice Works loses 12%.',
+        tags: { arithmetic: 1 }, log: 'abandoned the north cut beyond the crevasse',
+        run: () => fix('ice', -12),
+        out: `The north cut is roped off and left to the dark. The near face is grey with grit and the filters clog twice a shift. It is water. It is not good water. Dr. Adeyemi tastes it and makes a face that the whole Racks crew learns to imitate.`
+      },
+      {
+        label: 'Rope it, and carry the ice across by hand.', note: 'Hard labor. No parts spent.', risk: 'Someone may fall',
+        fx: { morale: -3 }, tags: { commons: 1 }, log: 'had ice carried across the crevasse by hand',
+        run: s => { s.tmp.d = chance(0.15) ? kill(1) : 0; },
+        out: s => s.tmp.d
+          ? `For a span the ice crosses on a rope line, block by block, on people’s backs. On the fourth day a hauler slips at the lip, and the line holds, and the harness does not. The north cut is abandoned after that, whatever it costs.`
+          : `For a span the ice crosses on a rope line, block by block, on people’s backs. Nobody falls. The haulers come off shift with shoulders like stone and a new song about the crevasse, which is ruder than it is good.`
+      },
+      {
+        label: 'Blast the lip and fill it.', note: 'Costs 4 parts in charges.', risk: 'The shelf may slump',
+        fx: { parts: -4 }, tags: { arithmetic: 1 }, log: 'had the crevasse blasted and filled',
+        run: s => { s.tmp.ok = chance(0.6); fix('ice', s.tmp.ok ? 10 : -20); },
+        out: s => s.tmp.ok
+          ? `The charges drop the lip into the gap in a single grey roar, and by the next shift the haulers are driving over it as if it had never been there. The whole cut is easier to work afterward.`
+          : `The charges drop the lip into the gap, and then keep going. Half the shelf around the north cut slumps with it. Nobody is hurt. The Ice Works will be digging itself out for a long time.`
+      }
+    ]
+  },
+  hollows_runner: {
+    kind: 'politics', title: 'A Runner from the Hollows', site: 'hollows', pool: true, weight: 1.5,
+    when: s => s.flags.two_fires && s.turn >= 7 && s.turn <= 16,
+    text: s => [
+      `A runner comes in off the shelf from the Hollows, frostbitten and exhausted, carrying a letter in Hadley’s hand. The vent taps that power the settlement are scaling up faster than anyone can clean them. They need parts. ${s.hollowsPop || 36} people are living on what the taps give.`,
+      `“They’re not asking for charity,” the runner says, before you can speak. “There’s duskbloom out there like you wouldn’t believe. We can pay.”`
+    ],
+    choices: [
+      {
+        label: 'Send the parts. They are ours too.', note: 'Costs 10 parts.',
+        fx: { parts: -10, morale: 2 }, tags: { mercy: 1, roots: 1 }, trust: { hadley: 4 }, log: 'sent parts to the Hollows without asking a price',
+        run: () => later(3, { h: 'hollowsThanks', label: 'The Hollows' }),
+        out: `The runner goes back with a full sledge and two Wrights who volunteered on the spot. Hadley’s reply comes a span later, three words long: *Owe you. H.* Kovač reads it and says it is the longest letter Hadley has ever written.`
+      },
+      {
+        label: 'Trade: parts for their duskbloom.', note: 'Costs 8 parts. +10 food.',
+        fx: { parts: -8, food: 10 }, tags: { market: 1 }, trust: { bao: 2 }, log: 'traded parts to the Hollows for duskbloom',
+        out: `The terms are drafted fair to the gram, and the runner signs for the Hollows. Within the span the first duskbloom comes in by sledge, grey-violet and frozen into bricks, and the Tally House is asking about a second trade before the first is finished.`
+      },
+      {
+        label: 'Send Reyes to fix the taps himself.', note: 'Costs 4 parts. The Hearth runs without him for a span.',
+        fx: { parts: -4 }, tags: { mercy: 1, wrights: 1 }, trust: { hadley: 3, reyes: -1 }, log: 'sent Reyes to repair the vent taps at the Hollows',
+        run: () => { mod({ id: 'reyesaway', label: 'Reyes away at the Hollows', k: 'hearth', mul: 0.9, for: 1 }); later(3, { h: 'hollowsThanks', label: 'The Hollows' }); },
+        out: `Reyes complains the whole way to the lock and comes back eight days later scalded pink by vent steam and unable to stop talking about the Hollows’ water. “Fourteen degrees,” he says, in the voice of a man who has seen something he did not expect to like.`
+      },
+      {
+        label: '“We have nothing to spare.”', note: 'The ridge keeps what it has.',
+        fx: { morale: -2 }, tags: { arithmetic: 1 }, trust: { hadley: -5 }, log: 'refused the Hollows’ request for parts',
+        out: `The runner hears it standing up, and leaves without resting. Hadley does not write again. The ridge keeps its parts, and for the rest of the span nobody in the Keel quite meets anyone else’s eye.`
+      }
+    ]
+  },
+  moreau_door: {
+    kind: 'council', title: 'Scratched in Steel', site: 'keel', who: 'moreau', pool: true, weight: 0.9, when: s => s.turn >= 5 && s.turn <= 15,
+    text: () => [
+      `Someone has scratched something into the steel of Moreau’s cabin door in the night. It is short, and it is about what happens to people who stir up trouble while the colony is starving. Moreau has not painted over it. She has stood a chair in front of it, as if it were a picture.`,
+      `Kovač wants two constables on her door. Moreau will not have them. “If I need guarding from the people I speak for,” she says, “then I have stopped speaking for them.”`
+    ],
+    choices: [
+      {
+        label: 'Post the constables anyway.', note: 'Safe. Insulting.',
+        tags: { watch: 1, decree: 1 }, trust: { kovac: 2, moreau: -3 }, log: 'posted constables on Moreau’s door against her wishes',
+        out: `The constables stand at her door in shifts. Moreau brings them tea every morning, very politely, and asks after their families, until by the end of the span both of them are coming to Commons meetings.`
+      },
+      {
+        label: 'Respect her wishes.', note: 'Her door, her choice.',
+        tags: { consent: 1 }, trust: { moreau: 3 }, log: 'respected Moreau’s refusal of a guard',
+        out: `Nothing happens. Moreau keeps the chair in front of the door and the door unlocked. A span later the scratches have been sanded off by someone in the night. Nobody admits to that either.`
+      },
+      {
+        label: 'Read the words aloud at the Plate, and say what you think of them.', note: 'Drag it into the light.',
+        fx: { morale: 1 }, tags: { candor: 2 }, trust: { moreau: 2 }, log: 'read the threat against Moreau aloud at the Plate',
+        out: `You read it out exactly, to three hundred people, and then you say what you think of it. You do not raise your voice. You do not need to. By the end of the shift there are forty names chalked on Moreau’s door around the scratches, and a second message under them, much longer.`
+      },
+      {
+        label: 'Have the Watch find who did it, quietly.', note: 'It may find them. It may find nothing.',
+        tags: { sealed: 1, watch: 1 }, trust: { kovac: 2 }, log: 'had the Watch quietly hunt for whoever threatened Moreau',
+        run: s => { s.tmp.ok = chance(0.6); },
+        out: s => s.tmp.ok
+          ? `It takes Kovač two days: a cutter on the lean plate, with three children and a brother in Vault B, who apologizes to Moreau in person, shaking. She makes him sit down and tells him about the ration ledger for an hour. He leaves a steward.`
+          : `The Watch questions half the east dormitory and finds nothing but resentment at being questioned. Moreau hears about it, and is angrier about that than she ever was about the door.`
+      }
+    ]
+  },
+  the_book: {
+    kind: 'politics', title: 'Odds', site: 'stores', who: 'bao', pool: true, weight: 0.9, when: s => s.turn >= 4 && s.turn <= 15 && s.flags.bao !== 'arrested',
+    text: () => [
+      `It comes out that Bao has been running a book. Odds on the date the Mirror Field gives its last watt. Odds on the next councillor to resign. Odds, in a column he would rather you had not seen, on how many names will be cut on the Plate before the sun comes back.`,
+      `“People bet on what they fear,” Bao says, entirely unrepentant. “It makes the fear smaller. And the book is very accurate. Better than the Watch’s, frankly.”`
+    ],
+    choices: [
+      {
+        label: 'Shut it down.', note: 'The column of names, especially.',
+        fx: { morale: -1 }, tags: { decree: 1 }, trust: { bao: -3, kovac: 2 }, log: 'shut down Bao’s betting book',
+        out: `Bao closes the book with a theatrical sigh and hands it over. The column about the Plate has already been torn out. “I am not a monster, Governor,” he says. “I am a bookmaker. There is a difference, though I grant it is small.”`
+      },
+      {
+        label: 'Take a cut for the common store.', note: '+4 food. The house always wins.',
+        fx: { food: 4 }, tags: { market: 1, arithmetic: 1 }, trust: { bao: 1, moreau: -2 }, log: 'took a cut of Bao’s book for the common store',
+        out: `The book goes on, with a stamp in the corner of every page: *five percent to the common store.* Bao says it is the first tax in the history of Hesper, and he would like it remembered that he collected it.`
+      },
+      {
+        label: 'Bet on everyone living, in public, with your own ration.', note: 'Put your plate where your mouth is.',
+        fx: { morale: 3 }, tags: { market: 1 }, trust: { bao: 3, kovac: -2 }, log: 'bet publicly in Bao’s book that nobody else would die',
+        out: `You bet a span of your own ration that no new name goes on the Plate before first light. Bao gives you terrible odds, and says so, loudly. Within a shift half the colony has bet the same way, against the house, and Bao is looking unusually thoughtful.`
+      },
+      {
+        label: 'Make him publish the odds, and the ledger behind them.', note: 'A book anyone can read.',
+        fx: { morale: 1 }, tags: { candor: 2 }, trust: { bao: -1, moreau: 2 }, log: 'made Bao publish his odds and his ledger',
+        out: `The odds go up on the wall of the Tally House, with the working. Bao is right about almost everything. People start reading the wall the way they read weather, and it is, by a distance, the most accurate forecast the colony has.`
+      }
+    ]
+  },
+  lost_child: {
+    kind: 'disaster', title: 'The West Lock', site: 'ice', pool: true, when: s => s.turn >= 3 && s.turn <= 15,
+    enter: s => { npc('kidparent', 'a rack tech'); s.scene.kid = pick(NAMES_FIRST); },
+    text: s => [
+      `The west lock was found open at second bell, and ${s.scene.kid}, nine, is not in any bunk in the Keel. ${npc('kidparent', 'a rack tech').name} is at the lock in shirtsleeves, held back by two people, shouting the name out over the shelf.`,
+      `A line of small boot prints goes out across the frost toward the Glare. The light on the shelf is failing, and the wind is rising. Everyone in the corridor is looking at you.`
+    ],
+    choices: [
+      {
+        label: 'Everyone out on the shelf, in lines.', note: 'A shift lost on the Racks.',
+        fx: { morale: 2 }, tags: { mercy: 1, commons: 1 }, log: 'sent the whole colony out to search the shelf',
+        run: s => { s.tmp.ok = chance(0.92); if (!s.tmp.ok) kill(1, 'cold'); mod({ id: 'search', label: 'A shift lost searching the shelf', k: 'racks', mul: 0.94, for: 1 }); },
+        out: s => s.tmp.ok
+          ? `Two hundred people walk the shelf in lines, arm’s length apart, calling. It is a cutter on the far left who finds ${s.scene.kid}, asleep in the lee of a pressure ridge a kilometre out, holding an empty jar meant for bringing home some of the Glare’s light.`
+          : `Two hundred people walk the shelf in lines until the wind drives them in. They find ${s.scene.kid} at first shift, a kilometre out, in the lee of a pressure ridge, and carry the small body home in a line that does not break.`
+      },
+      {
+        label: 'Send the outriders. They know the shelf.', note: 'Fast and skilled. Few hands.',
+        tags: { outriders: 1 }, trust: { hadley: 2 }, log: 'sent the outriders after a lost child',
+        run: s => { s.tmp.ok = chance(s.flags.two_fires ? 0.75 : 0.88); if (!s.tmp.ok) kill(1, 'cold'); },
+        out: s => s.tmp.ok
+          ? `The outriders are out of the lock in four minutes and back in two hours, with ${s.scene.kid} riding on the lead sledge wrapped in someone’s thermals and complaining about it. They say the trail was easy. Their faces say it was not.`
+          : `The outriders follow the prints until the wind fills them in. They search until the wind drives them back, go out again at first shift, and find what they were afraid they would find.`
+      },
+      {
+        label: 'Light every lamp on the lee wall, and wait.', note: 'Costs 8 reserve power. A beacon to walk home to.',
+        fx: { energy: -8 }, tags: { mercy: 1 }, log: 'lit the lee wall to guide a lost child home',
+        run: s => { s.tmp.ok = chance(0.8); if (!s.tmp.ok) kill(1, 'cold'); },
+        out: s => s.tmp.ok
+          ? `The lee wall blazes. Forty minutes later a small figure comes walking out of the dusk toward it, perfectly calm, and asks why everyone is crying. ${s.scene.kid} had been following the light the whole way.`
+          : `The lee wall blazes until the reserve runs low, and then Reyes, without being asked, keeps it burning anyway. Nobody comes walking out of the dark. They find ${s.scene.kid} at first shift, two hundred metres from the light.`
+      },
+      {
+        label: 'The Watch searches. Nobody else goes out.', note: 'No more lives risked.', risk: 'Fewer eyes on the shelf',
+        fx: { morale: -2 }, tags: { decree: 1, watch: 1, arithmetic: 1 }, trust: { kovac: 2 }, log: 'kept the colony inside while the Watch searched for a lost child',
+        run: s => { s.tmp.ok = chance(0.65); if (!s.tmp.ok) kill(1, 'cold'); },
+        out: s => s.tmp.ok
+          ? `Kovač takes six constables out on lines and finds ${s.scene.kid} in an hour, sitting on a ration crate at the old survey mark, waiting to be found. He carries the child home on his shoulders, which nobody who has met Kovač would have predicted.`
+          : `Six constables search until the wind drives them in. Behind the lock three hundred people wait in silence, and you can feel every one of them deciding what they think of you. ${s.scene.kid} is found at first shift.`
+      }
+    ]
+  },
+  sun_vigil: {
+    kind: 'politics', title: 'The Watchers', site: 'mirror', pool: true, when: s => s.turn >= 11 && s.turn <= 16,
+    text: () => [
+      `As the sun thins, people have started walking out to the Mirror Field on their rest shifts to watch it. First a few, then dozens. They stand in rows among the heliostats, facing the sun, and nobody talks. Some of them have started missing shifts to do it.`,
+      `Kovač calls it desertion by inches. Patience reports rack hours down three percent. Moreau says that if people want to say goodbye to the sun, it would be a strange sort of governor who stopped them.`
+    ],
+    choices: [
+      {
+        label: 'Let them watch. Go out and stand with them once.', note: 'The Racks lose 5% for two spans.',
+        fx: { morale: 4 }, tags: { mercy: 1, roots: 1 }, log: 'let the colony keep its vigil at the Mirror Field',
+        run: () => mod({ id: 'vigil', label: 'The sun vigil at the Mirror Field', k: 'racks', mul: 0.95, for: 2 }),
+        out: `You stand among them for the length of a shift while the sun sits on the rim of the world like a coin on a table. Nobody says anything. When you turn to go back, the people beside you turn with you, and go back to work.`
+      },
+      {
+        label: 'Make it a duty: one watch on the sun, by rota, every shift.', note: 'The vigil, organized.',
+        fx: { morale: 2 }, tags: { decree: 1, commons: 1 }, log: 'made the sun vigil a rota duty',
+        out: `The vigil becomes a post, with a log and a relief schedule, which takes some of the magic out of it and most of the absenteeism. Kovač calls it a good solution. Moreau calls it a good solution too, and each is faintly annoyed that the other agrees.`
+      },
+      {
+        label: 'Close the Field to anyone off shift.', note: 'The work comes first.',
+        fx: { morale: -4 }, tags: { decree: 1, watch: 1 }, trust: { kovac: 2 }, log: 'closed the Mirror Field to the sun vigil',
+        out: `Constables stand at the Field’s edge and turn people back. People go instead to the sunward rail of the Keel and watch from there, in rows, in silence, with their backs to the constables. Nobody misses a shift. Nobody forgets, either.`
+      },
+      {
+        label: 'Ask Patience to record the last sunsets, to play in the dark.', note: 'Costs 2 reserve power.',
+        req: s => s.flags.patience !== 'muted' || 'Patience is confined to the wreck',
+        fx: { energy: -2, morale: 2 }, tags: { ship: 1 }, trust: { patience: 2 }, log: 'had Patience record the last sunsets',
+        out: `Patience records every sunset from the Mirror Field cameras, at full resolution, and files them under a heading it will not tell anyone. People go back to their shifts. They know the light is being kept somewhere, and that seems to be enough.`
+      }
+    ]
+  },
+  growth_charts: {
+    kind: 'council', title: 'Growth Charts', site: 'racks', who: 'adeyemi', pool: true, weight: 0.9, when: s => s.turn >= 6 && s.turn <= 15,
+    text: s => [
+      `Dr. Adeyemi puts a chart on your desk without a word. Heights and weights for the thirty-one children, every span since landfall. The lines were climbing. Since the ration went ${s.policy.ration === 'standard' || s.policy.ration === 'generous' ? 'thin, a year ago,' : 'down'} they have flattened, and two of them have started to fall.`,
+      `“Adults can go short and recover,” she says. “Children can go short and not recover. I want a supplement from the stores for everyone under fifteen. I know what the ledger says. I am asking you to read this instead.”`
+    ],
+    choices: [
+      {
+        label: 'Children eat first, whatever it costs.', note: 'Costs 8 food.',
+        fx: { food: -8, morale: 3 }, tags: { mercy: 2 }, trust: { adeyemi: 3 }, log: 'gave the colony’s children a supplement from the stores',
+        out: `The supplement goes out at the children’s table the next shift: a second brick, and a spoonful of something Dr. Adeyemi has been hoarding. Within two spans the lines on her chart have turned upward again. She pins it to the wall of the Racks for everyone to see.`
+      },
+      {
+        label: 'Supplement the under-tens only.', note: 'Costs 4 food. Half the help.',
+        fx: { food: -4, morale: 1 }, tags: { mercy: 1, arithmetic: 1 }, trust: { adeyemi: 1 }, log: 'gave the youngest children a supplement',
+        out: `Dr. Adeyemi takes the half without arguing, which tells you how badly she needed it. The youngest lines climb. The older ones hold. She keeps both charts on her bench, side by side, where you will see them when you come by.`
+      },
+      {
+        label: 'Publish the chart. Let the colony decide what to give.', note: 'It depends on what the colony has left to give.',
+        tags: { candor: 2, consent: 1 }, trust: { adeyemi: 2 }, log: 'published the children’s growth charts to the colony',
+        run: s => { s.tmp.ok = s.morale >= 35; if (s.tmp.ok) { gain('food', -6); gain('morale', 4); } else gain('morale', -2); },
+        out: s => s.tmp.ok
+          ? `The chart goes up in the Commons, and by the end of the shift there is a crate under it, filling with ration bricks given one at a time from adult plates. Nobody organized it. Dr. Adeyemi stands looking at the crate for a long while.`
+          : `The chart goes up in the Commons. People look at it, and look away, and go to their bunks hungry. There is nothing left on their plates to give. Dr. Adeyemi takes it down herself, a span later.`
+      },
+      {
+        label: '“The ration stands. Grow more.”', note: 'The ledger holds.',
+        fx: { morale: -1 }, tags: { arithmetic: 1 }, trust: { adeyemi: -5 }, log: 'refused a supplement for the colony’s children',
+        out: `“Grow more,” Dr. Adeyemi repeats. She picks up the chart. “I will put that on the chart, then. Next to the line that stops.” She does, in red, with the span number, and initials it.`
+      }
+    ]
+  },
+  the_informer: {
+    kind: 'politics', title: 'A Name in the Dark', site: 'stores', who: 'kovac', pool: true, when: s => s.turn >= 6 && s.turn <= 15 && !s.flags.martial,
+    enter: () => { npc('informer', 'a salvage hand'); },
+    text: () => {
+      const p = npc('informer', 'a salvage hand');
+      return [
+        `${p.name}, ${p.role}, asks to see you alone and will not sit down. There is a group in the east dormitory, eight or nine people, who have been talking about taking the Tally House some rest shift soon and sharing out what is in it, before the dark comes and the Governor “locks it all up for the vaults.”`,
+        `Kovač, who arranged the meeting, is already drafting a list. “We have names, Governor. We can have them in a cell before they have made up their minds.”`
+      ];
+    },
+    choices: [
+      {
+        label: 'Arrest them before they move.', note: 'Nothing is taken. Something is lost.',
+        fx: { morale: -3 }, tags: { watch: 2, decree: 1 }, infl: { kovac: 4 }, log: 'had a group arrested for planning to raid the stores',
+        out: `The Watch takes nine people out of the east dormitory at third bell. Two of them had a crowbar. The rest had a grievance. All nine spend a span in the cells, and the whole dormitory spends it not speaking to the Watch.`
+      },
+      {
+        label: 'Go to Moreau. The Commons deals with its own.', note: 'Trust the Speaker with it.',
+        tags: { consent: 1, candor: 1 }, trust: { moreau: 3, kovac: -2 }, log: 'took the plot against the stores to Moreau',
+        out: `Moreau listens, goes white, and goes to the east dormitory without waiting for the end of the shift. You never learn what she says. The plan is not mentioned again, and a span later two of the nine are stewards.`
+      },
+      {
+        label: 'Double the guard on the Tally House, and wait.', note: 'A visible lock.',
+        fx: { morale: -1 }, tags: { watch: 1 }, trust: { kovac: 1 }, log: 'doubled the guard on the Tally House',
+        out: `Four constables stand at the Tally House doors instead of two, in plain sight. Nothing happens. The group in the east dormitory, presumably, can count.`
+      },
+      {
+        label: 'Walk into the east dormitory yourself, unannounced.', note: 'It depends on whether they still believe you.', risk: 'They may not listen',
+        tags: { candor: 1, mercy: 1 }, log: 'went alone to face the group planning to raid the stores',
+        run: s => { s.tmp.ok = s.morale >= 30 || avgTrust() >= 48; if (s.tmp.ok) gain('morale', 2); else { gain('food', -8); gain('morale', -2); } },
+        out: s => s.tmp.ok
+          ? `You sit down on a bunk in the middle of them and ask what they think is in the Tally House. Then you tell them. All of it. The meeting goes on for three hours. By the end it is a meeting about the ration, and nobody mentions a crowbar.`
+          : `You sit down in the middle of them and talk. They listen politely, and wait for you to leave. Two rest shifts later the Tally House door is forced in the night, and eight units of ration walk out under coats. Nobody saw anything.`
+      }
+    ]
+  },
+  vent_field: {
+    kind: 'discovery', title: 'Warm Ground', site: 'flats', who: 'adeyemi', pool: true, when: s => s.turn >= 6 && s.turn <= 15 && s.sites.flats.known,
+    text: () => [
+      `Dr. Adeyemi’s crews at the Flats have found a vent: a fist-sized hole in the rock that breathes out air at thirty degrees, steadily, as it has presumably been doing for a million years. Around it the duskbloom grows three times as thick as anywhere else.`,
+      `There is enough heat in it to matter, if someone pipes it somewhere. Everybody has an idea where.`
+    ],
+    choices: [
+      {
+        label: 'Pipe it under the duskbloom beds.', note: 'Costs 8 parts. The Flats yield 20% more from now on.',
+        fx: { parts: -8 }, tags: { roots: 1, growers: 1 }, trust: { adeyemi: 3 }, log: 'piped vent heat under the duskbloom beds',
+        run: () => mod({ id: 'vent', label: 'Vent heat under the duskbloom beds', k: 'flats', mul: 1.2 }),
+        out: `The pipe goes in under the beds in a span, and within another the duskbloom over it has gone from grey-violet to something close to purple. Dr. Adeyemi takes readings every hour and smiles at all of them.`
+      },
+      {
+        label: 'Pipe it to the Ice Works melt line.', note: 'Costs 8 parts. The Ice Works gains 20%.',
+        fx: { parts: -8 }, tags: { wrights: 1 }, log: 'piped vent heat to the Ice Works melt line',
+        run: () => fix('ice', 20),
+        out: `The warm air runs along the melt line in an insulated sleeve, and the line stops freezing at night for the first time since landfall. The ice cutters, who have spent fourteen months chipping it free with bars, throw a small party, with the bars.`
+      },
+      {
+        label: 'Build a warm room beside it for the sick.', note: 'Costs 10 parts. Fever spreads less for five spans.',
+        fx: { parts: -10, morale: 2 }, tags: { mercy: 1, roots: 1 }, log: 'built a warm convalescent room at the vent',
+        run: s => { s.flags.screened = Math.max(s.flags.screened || 0, s.turn + 5); },
+        out: `The warm room is four walls of hull plate and a bench around the vent. The surgeon sends the slowest-healing patients out to it, and they come back in a span pink-faced and arguing. It is the first building on Hesper built for comfort.`
+      },
+      {
+        label: 'Mark it on the map, and leave it for later.', note: 'Free. Nothing now.',
+        tags: { arithmetic: 1 }, trust: { adeyemi: -1 }, log: 'marked the vent at the Flats for later',
+        out: `The vent goes on the map as a small circle with a question mark. Dr. Adeyemi visits it on her rest shifts, alone, and sits with her back against the warm rock, and does not tell you what she thinks about there.`
+      }
+    ]
+  },
+  kovac_log: {
+    kind: 'council', title: 'Four Hundred and Thirty-One Entries', site: 'keel', who: 'kovac', pool: true, weight: 0.9,
+    when: s => s.turn >= 5 && s.turn <= 15 && s.chars.kovac.trust >= 30,
+    text: () => [
+      `Kovač puts a book on your desk: a ship’s logbook, the paper kind, filled edge to edge in his small upright hand. One entry for every day he held the colony. What he decided, and why, and what it cost. Including the order that kept you frozen. Including the days he got it wrong.`,
+      `“The charter requires me to surrender my records to the governing authority,” he says. “I am surrendering them. What you do with them is your decision. Moreau would like them read at the Plate. I would like you to know, before you choose, that some of it is not to my credit.”`
+    ],
+    choices: [
+      {
+        label: 'Publish it. All of it.', note: 'The colony reads its own history.',
+        fx: { morale: -1 }, tags: { candor: 2 }, trust: { kovac: 1, moreau: 3 }, log: 'published Kovač’s log of the first 431 days',
+        out: `The log goes up in the Commons a page a day, and people read it standing up. Some of it makes them angry. Most of it makes them quiet. By the end, a good many of them have stopped calling him the Administrator, and started calling him Idris.`
+      },
+      {
+        label: 'Seal it in the charter cabinet.', note: 'History, kept for later.',
+        tags: { sealed: 1 }, trust: { kovac: 3, moreau: -2 }, log: 'sealed Kovač’s log in the charter cabinet',
+        out: `You lock it in the cabinet with the manifests. Kovač watches you turn the key, and something in his shoulders lets go. “Thank you,” he says, and then, because he cannot help it: “The lock sticks. Lift and turn.”`
+      },
+      {
+        label: 'Give it back. “It is yours to carry, or to put down.”', note: 'Not every record is the colony’s.',
+        tags: { mercy: 1 }, trust: { kovac: 4 }, log: 'gave Kovač back his log',
+        out: `He holds it for a long moment. Then he puts it inside his coat, over his heart, where it has presumably always been. He does not say thank you. He does nod, once, the nod he gives to orders he agrees with.`
+      },
+      {
+        label: 'Read it yourself tonight, every page, and tell him what you think.', note: 'He asked for a reader. Be one.',
+        tags: { candor: 1 }, trust: { kovac: 5 }, log: 'read Kovač’s log and gave him your verdict',
+        out: `It takes you until second bell. In the morning you tell him what you think: that he was wrong four times and right four hundred and twenty-seven, and that you would have frozen you too. He hears it at attention. Then he sits down, which you have never seen him do in your office.`
+      }
+    ]
+  },
+
+  /* ---------- the dark pool: drawn only during the Dimming ---------- */
+  frozen_line: {
+    kind: 'disaster', title: 'The Return Line', site: 'hearth', who: 'reyes', pool: true, dark: true, when: () => isDim(),
+    text: () => [
+      `In the deep cold a coolant return line on the Hearth’s outside run has frozen solid, and the reactor is running hot on one side and starved on the other. The output needle has dropped a fifth and is still moving.`,
+      `Reyes is already in his thermals. “I can bypass it off the bus and thaw it, cut it out and fit a spare, or run her on one loop until the sun comes back. Pick fast. She doesn’t like this.”`
+    ],
+    choices: [
+      {
+        label: 'Thaw it with a bypass from the bus.', note: 'Costs 8 reserve power.',
+        fx: { energy: -8 }, tags: { wrights: 1 }, trust: { reyes: 1 }, log: 'had the frozen return line thawed off the bus',
+        out: `The bypass hums for six hours and the line comes back with a bang that everyone in the Keel mistakes for disaster. It is not disaster. It is plumbing. Reyes is the only one who laughs.`
+      },
+      {
+        label: 'Cut it out and fit a spare.', note: 'Costs 8 parts. The Hearth gains 6%.',
+        fx: { parts: -8 }, tags: { wrights: 1 }, trust: { reyes: 2 }, log: 'had the frozen return line replaced',
+        run: () => fix('hearth', 6),
+        out: `Reyes and two Wrights cut the frozen section out at forty below, working in ten-minute shifts with a heater blowing on their hands. The spare goes in true. Reyes says it is better than the original, and is offended when nobody is surprised.`
+      },
+      {
+        label: 'Run her on one loop until the light comes back.', note: 'The Hearth runs at 85% for two spans.',
+        tags: { arithmetic: 1 }, trust: { reyes: -2 }, log: 'ran the Hearth on one coolant loop through the dark',
+        run: () => mod({ id: 'oneloop', label: 'Hearth on one coolant loop', k: 'hearth', mul: 0.85, for: 2 }),
+        out: `“One loop,” Reyes says, “in the coldest weeks of the year. You understand you’re asking her to run on one lung.” He does it anyway, and spends the next two spans sleeping beside the board.`
+      },
+      {
+        label: 'Send the Wrights out with torches, in shifts, until it runs.', note: 'Free. Brutal work outside.', risk: 'Forty below on the line',
+        fx: { morale: -2 }, tags: { commons: 1 }, log: 'had the Wrights thaw the return line by hand',
+        run: s => { s.tmp.d = chance(0.2) ? kill(1, 'cold') : 0; fix('hearth', 3); },
+        out: s => s.tmp.d
+          ? `They thaw it by hand, torch by torch, a metre an hour, and it runs again by the end of the shift. One of the Wrights comes in with frostbite the surgeon cannot fix, and is gone by morning.`
+          : `They thaw it by hand, torch by torch, a metre an hour, and come in grey with cold and whooping. Every one of them gets a double ration and an hour in the Hearth control room, the warmest place on the ridge.`
+      }
+    ]
+  },
+  dark_choir: {
+    kind: 'council', title: 'The Choir', site: 'keel', who: 'moreau', pool: true, dark: true, when: s => isDim() && s.flags.doctrine !== 'hollows',
+    text: () => [
+      `Someone started it in the second shift of the dark: a song at every shift change, in the Commons, by whoever is passing. Now there are sixty of them, every shift, and some of the songs have new words about the cold, and some of the words are funny.`,
+      `The night shift complains it cannot sleep. The choir asks whether the Commons lamps can be turned off while they sing, to save power, since they know the words. Moreau, who is in the choir, recuses herself, loudly.`
+    ],
+    choices: [
+      {
+        label: 'Lamps out, and let them sing in the dark.', note: '+3 reserve power.',
+        fx: { energy: 3, morale: 4 }, tags: { commons: 1, mercy: 1 }, log: 'let the choir sing in the dark with the lamps off',
+        out: `The lamps go out at every shift change, and in the dark sixty voices sing the colony through to the next bell. It is the strangest thing you have ever heard. People who cannot sing come anyway, just to stand in it.`
+      },
+      {
+        label: 'Give them the Commons with the lamps on.', note: 'Costs 2 reserve power.',
+        fx: { energy: -2, morale: 3 }, tags: { commons: 1 }, log: 'gave the choir the lit Commons',
+        out: `The choir sings under the lamps, faces lit, and you can see who is singing and who is crying, and that turns out to matter. A few of the night shift come to complain, and stay.`
+      },
+      {
+        label: 'Quiet hours for the night shift. Day shifts only.', note: 'Sleep comes first.',
+        fx: { morale: -1 }, tags: { arithmetic: 1, decree: 1 }, log: 'set quiet hours on the choir for the night shift',
+        out: `The choir accepts the hours with poor grace and a new song about governors, which it sings, scrupulously, only in the permitted hours. The night shift sleeps. Everyone learns the song.`
+      },
+      {
+        label: 'Join the choir yourself.', note: 'You cannot sing. Sing anyway.',
+        fx: { morale: 3 }, trust: { moreau: 2 }, log: 'sang in the Commons choir in the dark',
+        out: `You stand in the back row and sing, badly, in the dark. Nobody can see you. Everybody knows. By the end of the span the choir has a song with you in it, and it is not unkind.`
+      }
+    ]
+  },
+  lock_walkers: {
+    kind: 'disaster', title: 'Walking Out', site: 'keel', who: 'kovac', pool: true, dark: true, when: s => isDim() && s.flags.doctrine !== 'hollows',
+    enter: () => { const b = snap(); kill(1, 'cold'); log('loss', 'Losses', 'Someone walked out of the main lock into the dark, and was found too late.', { d: diff(b) }); },
+    text: () => [
+      `Three times this span someone has walked out of the main lock into the dark, alone, in shirtsleeves. Two were found and brought back with frostbite. The third was found too late. None of them can say why, afterward, except that it felt like the right direction.`,
+      `The surgeon calls it the dark sickness, and says it is not a sickness, exactly. Kovač wants the lock chained and a constable on it, day and night.`
+    ],
+    choices: [
+      {
+        label: 'Chain the lock. A constable on it day and night.', note: 'Nobody walks out. Everybody feels caged.',
+        fx: { morale: -2 }, tags: { watch: 1, decree: 1 }, trust: { kovac: 2 }, log: 'had the main lock chained against the dark sickness',
+        out: `The chain goes on, and a constable sits by it with a lamp and a book. Twice that span someone comes down to the lock in the middle of the night and stands looking at the chain, and the constable talks to them until they go back to bed.`
+      },
+      {
+        label: 'The buddy rule: nobody goes anywhere alone in the dark.', note: 'The Racks run 5% slower for two spans.',
+        fx: { morale: 1 }, tags: { commons: 1, mercy: 1 }, log: 'set the buddy rule for the dark',
+        run: () => mod({ id: 'buddies', label: 'The buddy rule', k: 'racks', mul: 0.95, for: 2 }),
+        out: `Nobody goes anywhere alone: not to the latrines, not to the Racks, not to bed. It is exhausting and ridiculous, and by the end of the span everyone has had more conversations than in the whole year before, and nobody else walks out.`
+      },
+      {
+        label: 'Full lamps in the dormitories, whatever it costs.', note: 'Costs 8 reserve power.',
+        fx: { energy: -8, morale: 3 }, tags: { mercy: 1 }, log: 'burned full lamps in the dormitories against the dark sickness',
+        out: `The dormitories blaze at full light all day and all night, and the walking stops. The surgeon says it is not the light, exactly. Reyes says it is exactly the light, and shows you the reserve, and you both look at it for a while.`
+      },
+      {
+        label: 'Let the surgeon treat it as an illness, case by case.', note: 'No cost now.', risk: 'Someone else may walk',
+        tags: { arithmetic: 1 }, log: 'left the dark sickness to the surgeon',
+        run: s => { s.tmp.d = chance(0.35) ? kill(1, 'cold') : 0; },
+        out: s => s.tmp.d
+          ? `The surgeon does what can be done: sedatives, company, a watch on the worst cases. It is not quite enough. Someone else walks out before the span ends, and is not found until the light comes back.`
+          : `The surgeon does what can be done: sedatives, company, a watch on the worst cases. It holds. Nobody else walks out, though one night the constable on the lock finds the surgeon there, standing, looking.`
+      }
+    ]
+  },
+  aurora: {
+    kind: 'discovery', title: 'The Sky on Fire', site: 'ridge', pool: true, dark: true, when: () => isDim(),
+    text: () => [
+      `In the deep of the dark the sky over the frozen side catches fire. Green first, then a red at the top like a lamp seen through a hand, in curtains that move as you watch. Nobody on the manifest has seen anything like it.`,
+      `Within the hour half the colony is at the ports, and the other half is pulling on thermals.`
+    ],
+    choices: [
+      {
+        label: 'Everyone out, in shifts, wrapped in everything.', note: 'Forty below, and worth it.', risk: 'Someone may stay out too long',
+        fx: { morale: 6 }, tags: { roots: 1, commons: 1 }, log: 'let the whole colony out to see the aurora',
+        run: s => { s.tmp.d = chance(0.15) ? kill(1, 'cold') : 0; },
+        out: s => `They go out in shifts of thirty, roped in lines, and stand on the shelf with their heads back until the constables call time. ` + (s.tmp.d ? `One old cutter slips off the line to watch alone, and is found at the end of the shift sitting upright, smiling, gone.` : `Everybody comes back. For a span afterward people greet each other by holding up their hands and moving their fingers like curtains.`)
+      },
+      {
+        label: 'Turn off the Keel’s lamps, and watch through the ports.', note: '+4 reserve power.',
+        fx: { energy: 4, morale: 4 }, tags: { commons: 1 }, log: 'darkened the Keel so the colony could watch the aurora',
+        out: `Every lamp in the Keel goes out at once, and in the dark three hundred faces are lit green at the ports. Children are held up. Nobody speaks above a whisper. The reserve gains a few points, and nobody cares.`
+      },
+      {
+        label: 'Let Patience measure it. It may mean something.', note: 'Science, for later.',
+        fx: { morale: 2 }, tags: { ship: 1, arithmetic: 1 }, trust: { patience: 2 }, log: 'had Patience measure the aurora',
+        out: `Patience measures it nineteen ways and announces at the end that it is a storm off the sunward side, reaching round the world, which will happen, it calculates, every Dimming. “It is a calendar,” Patience says. “It will come back.” People find this more comforting than anything you could have said.`
+      },
+      {
+        label: '“Stay inside. It will come back.”', note: 'Nobody freezes for a sky.',
+        fx: { morale: -2 }, tags: { decree: 1 }, log: 'kept the colony inside during the aurora',
+        out: `The lock stays closed. People crowd the ports instead, three deep, standing on crates, and see it anyway, the way you see anything through a port: a little, and wanting more. Nobody freezes. Nobody quite forgives you either.`
+      }
+    ]
+  },
+  cold_ward: {
+    kind: 'disaster', title: 'The Cold Ward', site: 'infirm', pool: true, dark: true, when: () => isDim(),
+    enter: () => { npc('surgeon', 'the colony surgeon'); },
+    text: s => [
+      `The infirmary has run out of beds. The cold has filled it with the old, the thin and the coughing, and ${npc('surgeon', 'the colony surgeon').name} is working in a corridor lined with pallets, by lamplight, in a coat.`,
+      `“I need heat and I need room,” the surgeon says. “I don’t much care which of your problems you take them from.”` + (s.sleepers > 0 ? ` On the panel, Patience mentions the vault margin, and then says it wishes it had not.` : ``)
+    ],
+    choices: [
+      {
+        label: 'Move the ward into the Hearth control room.', note: 'The warmest room on the ridge. Reyes will hate it.',
+        fx: { morale: 2 }, tags: { mercy: 1 }, trust: { reyes: -2 }, log: 'moved the cold ward into the Hearth control room',
+        out: `The pallets go in between the consoles. Reyes hates it for exactly one shift, and then starts explaining the gauges to the patients, who are a captive audience and, in some cases, interested.`
+      },
+      {
+        label: 'Double heat to the infirmary.', note: 'Costs 6 reserve power.',
+        fx: { energy: -6, morale: 1 }, tags: { mercy: 1 }, log: 'doubled the heat to the infirmary',
+        out: `The infirmary goes from four degrees to eighteen in a shift. The coughing does not stop, but it loosens. The surgeon takes off the coat for the first time in a span, and falls asleep sitting on a crate.`
+      },
+      {
+        label: 'Send the sick home to their bunks, with blankets.', note: 'Free. The weakest may not last.',
+        fx: { morale: -2 }, tags: { arithmetic: 1 }, log: 'sent the sick back to their dormitories',
+        run: s => { s.tmp.d = kill(rint(1, 3), 'cold'); },
+        out: s => `The pallets are cleared and the sick go back to their bunks with every blanket the stores can spare. Their bunkmates nurse them, and mostly it is enough. ` + (s.tmp.d === 1 ? `One is not found warm in the morning.` : s.tmp.d ? `${s.tmp.d} are not found warm in the morning.` : `Everyone is found warm in the morning.`)
+      },
+      {
+        label: 'Borrow power from the vault margin.', note: '+6 reserve power.', risk: 'A sleeper may die',
+        req: s => s.sleepers > 0 || 'The vaults are empty',
+        fx: { energy: 6 }, tags: { arithmetic: 1, mercy: 1 }, trust: { patience: -6 }, log: 'borrowed power from the vault margin for the cold ward',
+        run: s => { s.tmp.d = chance(0.4) ? killSleepers(rint(1, 2)) : 0; },
+        out: s => `“I will comply,” says Patience, and the infirmary lights brighten as the vault lamps dim. ` + (s.tmp.d ? `Two shifts later it reports ${plural(s.tmp.d, 'pod')} lost in Vault B, in the same even voice, and then is silent for an hour.` : `It reports every vault temperature to you, every hour, for the rest of the span, without comment. Nothing is lost.`)
+      }
+    ]
+  },
+  dark_letters: {
+    kind: 'council', title: 'Letters to No One', site: 'keel', pool: true, dark: true, when: () => isDim(),
+    text: () => [
+      `It starts with one letter, pinned to the Plate, addressed to a sister on the world the colony left, who will never read it. By the next shift there are forty. By the end of the span the Plate is papered over with letters to people who are not here.`,
+      `Moreau asks what you want done with them. Kovač points out, quite gently for him, that the names of the dead are underneath.`
+    ],
+    choices: [
+      {
+        label: 'Write one yourself, and read it aloud at the Plate.', note: 'Yours, in front of everyone.',
+        fx: { morale: 3 }, tags: { candor: 1 }, log: 'wrote a letter to someone left behind and read it at the Plate',
+        out: `You write it in an hour and read it in three minutes, to someone you have not let yourself think about since you woke. You get through it. Afterward a great many people come to the Plate to read theirs aloud too, and the Commons stays lit until second bell.`
+      },
+      {
+        label: 'Gather them into the charter cabinet until first light.', note: 'Kept safe, and the names uncovered.',
+        fx: { morale: 2 }, tags: { sealed: 1 }, trust: { kovac: 2 }, log: 'kept the letters in the charter cabinet until first light',
+        out: `Every letter is taken down by Moreau herself, flattened, numbered and laid in the cabinet in a box marked *Mail.* The names on the Plate are bare again. People keep writing anyway, and bringing the letters to your office, and the box fills.`
+      },
+      {
+        label: 'Send them out along the fleet lane from the Spire.', note: 'Costs 6 reserve power. Needs the Spire built.',
+        req: s => s.sites.ridge.stage >= 3 || 'Needs the Spire built',
+        fx: { energy: -6, morale: 5 }, tags: { return: 1 }, trust: { reyes: 3 }, log: 'sent the colony’s letters out from the Spire',
+        out: `Every letter is compressed into a single burst, and Reyes sends it out along the fleet lane toward a sky nobody can see. It will reach no one for years. It may never reach anyone. The Commons cheers it anyway, as if it were a ship leaving.`
+      },
+      {
+        label: 'Bury them under the Plate, for whoever comes next.', note: 'A time capsule, in steel.',
+        fx: { morale: 3 }, tags: { roots: 1 }, log: 'buried the letters under the Plate',
+        out: `The Wrights cut a cavity in the deck under the Plate and seal the letters into it in a coolant canister, labelled in six languages with when it may be opened: *at the next Dimming.* Eleven years. Some people are already writing the next ones.`
+      }
+    ]
+  }
+});
+Object.assign(HANDLERS, {
+  deckCut: () => {
+    gain('parts', 16);
+    return { k: 'good', who: S.flags.patience === 'muted' ? null : 'patience', text: 'The frozen engineering deck is open, cut along Patience’s lines without a mark on the vault feed. Parts +16.' };
+  },
+  apprenticesReady: () => {
+    fix('hearth', 10); gain('energy', 4);
+    return { k: 'good', who: 'reyes', text: 'Reyes’s two apprentices sat their first shift alone at the Hearth board, and nothing broke. Reserve power +4.' };
+  },
+  hollowsThanks: () => {
+    if (!S.flags.two_fires) return null;
+    gain('food', 8);
+    return { k: 'good', who: 'hadley', text: 'A sledge came in from the Hollows, unasked for, loaded with duskbloom. Food +8.' };
+  }
+});
+</script>
+<script>
+'use strict';
 /* The field guide: how to read the screen, play a span, and start over. Rendered into the Guide tab. */
 function guideHTML() {
   const show = (id, what) => `<button class="btn small" data-act="point" data-id="${id}" aria-label="Show me ${what}">Show me</button>`;
@@ -3348,7 +4677,7 @@ function guideHTML() {
   const start = `<ol>
     <li><b>Read the span report.</b> It lists what changed since the last span. A plus is good news, a minus is bad, a cross is a loss. “Follows from span 3” means the line is the result of something you decided then. Press Continue.</li>
     <li><b>Decide the matter in front of you.</b> Each option shows what it costs or gains at once, any risk, and which councillors back or oppose it. Click an option or press its number. Decisions cannot be undone.</li>
-    <li><b>Read the outcome</b> and press Continue. Most spans bring one matter. Some bring two.</li>
+    <li><b>Read the outcome</b> and press Continue. Most spans bring two matters. Some bring three.</li>
     <li><b>Give your work order.</b> When the story panel says “The span is yours”, click a site on the map, then an order in the panel under the map. Each order uses one crew for the span.</li>
     <li><b>Check the standing policy</b> under Colony if food or morale is sliding.</li>
     <li><b>Press End span.</b> The colony eats, burns power and wears down. The next report tells you how it went.</li>
