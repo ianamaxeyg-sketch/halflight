@@ -234,10 +234,12 @@ h1, h2, h3, h4, p { margin: 0; }
 .choice { width: 100%; text-align: left; display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 12px; padding: 11px 13px 12px; background: var(--raised); border: 1px solid var(--line); border-radius: 4px; cursor: pointer; }
 .choice:hover:not(:disabled) { border-color: var(--fg); }
 .choice:disabled { cursor: not-allowed; }
-.choice:disabled .c-label, .choice:disabled .c-note { opacity: .55; }
+.choice:disabled .c-label, .choice:disabled .c-note, .choice:disabled .c-logic { opacity: .55; }
 .c-key { font: 800 condensed 1.25rem/1.15 var(--f-display); color: var(--fg-faint); min-width: .9em; }
 .c-label { display: block; font-weight: 600; font-size: 1rem; line-height: 1.35; }
 .c-note { display: block; color: var(--fg-dim); font-size: .86rem; margin-top: 2px; }
+.c-logic { display: flex; gap: .4rem; align-items: baseline; color: var(--fg-dim); font-size: .84rem; line-height: 1.4; margin-top: 6px; }
+.c-logic .ico { color: var(--warn); }
 .c-meta { display: flex; flex-wrap: wrap; gap: 6px 8px; margin-top: 8px; align-items: center; }
 .stance { position: relative; display: inline-flex; align-items: center; gap: 4px; font-size: .76rem; color: var(--fg-dim); margin-right: 6px; }
 .c-why { display: grid; gap: 2px; margin-top: 8px; font-size: .82rem; color: var(--fg-dim); }
@@ -1475,8 +1477,8 @@ Object.assign(EVENTS, {
         out: `“The council,” Kovač repeats, as though testing the weight of a tool he has not used in a while. Moreau is already counting votes. You can see her lips move.`
       },
       {
-        label: 'Keep him on the Watch. Take the ledgers into your own hands.', note: 'He keeps the constables. You keep the books.',
-        tags: { decree: 1, candor: 1 }, trust: { kovac: 1 }, log: 'kept Kovač on the Watch and took the ledgers yourself',
+        label: 'Keep him on the Watch. Take the ledgers into your own hands.', note: 'He keeps the constables. You keep the books.', why: { kovac: 'it is how the charter drew the office: the Watch, without the books' },
+        tags: { decree: 1, candor: 1 }, trust: { kovac: 3 }, log: 'kept Kovač on the Watch and took the ledgers yourself',
         run: () => flag('kovac', 'watch'),
         out: `“The Watch,” Kovač says, “without the books.” He weighs it like a man weighing a ration. “That is how the charter drew it. I had forgotten.” He opens the cabinet for you himself, drawer by drawer, and does not once look at Moreau.`
       }
@@ -1510,7 +1512,7 @@ Object.assign(EVENTS, {
         out: `The speech is short and well received. The council session afterward is neither. Six people now carry what you carry. Bao Linh folds the knowledge away somewhere behind his eyes, like a man pocketing a coin.`
       },
       {
-        label: 'Tell them the dark is coming. Keep the stores figure to yourself.', note: 'The Dimming, yes. The eight spans, no.',
+        label: 'Tell them the dark is coming. Keep the stores figure to yourself.', note: 'The Dimming, yes. The eight spans, no.', trust: { kovac: 4, moreau: -2 }, why: { kovac: 'a colony that knows the dark is coming, but not how thin the stores are, prepares without panicking', moreau: 'half the truth is still a secret' },
         fx: { morale: -2 }, tags: { candor: 1, sealed: 1 }, log: 'told the colony about the Dimming but not about the stores',
         run: () => { flag('dimming', 'public'); later(3, { ev: 'prep_council', label: 'The colony is organizing for the Dimming' }); },
         out: `You give them the dark and keep the arithmetic. They take it better than you feared, perhaps because you have left them a little room to hope in. Kovač, at the edge of the crowd, makes a note of exactly what you left out.`
@@ -1548,7 +1550,7 @@ Object.assign(EVENTS, {
         out: `By the next shift there are two queues in the mess hall. The ice cutters and the rack crews take the full plate without looking up. Everyone else takes the light one and looks at them. It is efficient. Bao approves of it the way he approves of a sharp knife.`
       },
       {
-        label: 'Put it to the Commons, and live with what they choose.', note: 'They will choose the light plate, and own it.',
+        label: 'Put it to the Commons, and live with what they choose.', note: 'Rations go to the light plate: a quarter less eaten, and morale suffers. They will own it.',
         fx: { morale: -1 }, tags: { consent: 2, arithmetic: 1 }, log: 'let the Commons vote on the ration',
         run: () => setRation('lean'),
         out: `The Commons argues for six hours and votes for the light plate, a hundred and sixty hands to ninety. “If we are going to be hungry,” a cutter says from the floor, “we will be hungry on purpose.” Kovač, at the back, abstains, and looks as though it hurts.`
@@ -1579,7 +1581,7 @@ Object.assign(EVENTS, {
         out: `The rota takes Bao a full shift to draw up and satisfies no one completely, which Moreau says is how you know it is fair. Green hands on the racks cost a little yield. The paint comes off the doors.`
       },
       {
-        label: 'Anyone who takes a heavy shift eats the heavy plate. Anyone.', note: 'Volunteers fill the hard shifts. Some will overreach.',
+        label: 'Anyone who takes a heavy shift eats the heavy plate. Anyone.', note: 'The Racks yield 5% more for three spans. Some will overreach.',
         fx: { morale: 1 }, tags: { consent: 1, market: 1 }, log: 'opened the heavy shifts and the full plate to volunteers',
         run: () => mod({ id: 'heavyvol', label: 'Volunteers on the heavy shifts', k: 'racks', mul: 1.05, for: 3 }),
         out: `By the next bell there is a sign-up sheet nailed beside the HEAVY door, and it is full by third shift. The paint stays; it just means something different now. The surgeon asks you, drily, to expect sprains.`
@@ -1613,7 +1615,7 @@ Object.assign(EVENTS, {
         out: `A crew spends the span pulling actuators off the eastmost heliostats and carrying them leeward in padded crates. The Hearth steadies. A sixth of the Mirror Field now stares at the ground.`
       },
       {
-        label: 'Empty the parts bin and rebuild the loop hot, a section at a time.', note: 'Costs 14 parts. Full output, no risk, nothing left over.',
+        label: 'Empty the parts bin and rebuild the loop hot, a section at a time.', note: 'Costs 14 parts. Full output, no risk, and the Hearth gains 20%.',
         fx: { parts: -14 }, tags: { wrights: 1 }, trust: { reyes: 2 }, log: 'spent the parts bin to rebuild Loop Two without a shutdown',
         run: () => fix('hearth', 20),
         out: `Reyes builds the new loop alongside the old one and swaps it over a section at a time, hot, with the whole Wright crew holding its breath. It eats every spare fitting in the Tally House. The Hearth never drops below ninety.`
@@ -1636,7 +1638,7 @@ Object.assign(EVENTS, {
         out: `It takes the whole span. The Keel wears its coats indoors and the Racks run on a third of their lamps. But the needle comes up smooth, and Reyes sleeps for eleven hours afterward on the control room floor.`
       },
       {
-        label: 'Hot restart. Now.', note: 'Power back within the shift.', risk: 'Could cost a life',
+        label: 'Hot restart. Now.', note: 'Power back within the shift.', logic: '50% chance the restart takes: the Hearth runs at 80% this span. Otherwise a pump mechanic dies, the Hearth loses 10%, and morale −4.', risk: 'Could cost a life',
         tags: { arithmetic: 1 }, trust: { reyes: -6 }, log: 'ordered a hot restart of the Hearth',
         run: s => {
           s.tmp.ok = chance(0.5);
@@ -1648,13 +1650,13 @@ Object.assign(EVENTS, {
           : `The needle jumps and keeps going. A relief valve on the cold leg opens across the catwalk where ${s.tmp.name} is standing. The Hearth comes back. ${s.tmp.name} does not. Reyes cuts the name into the Plate himself.`
       },
       {
-        label: '“Your reactor, Reyes. Your call. I will stand behind it.”', note: 'He will choose the book, and beat it.',
+        label: '“Your reactor, Reyes. Your call. I will stand behind it.”', note: 'The Hearth gives a third of its power this span. He will choose the book, and beat it.',
         trust: { reyes: 6 }, log: 'left the Hearth restart to Reyes',
         run: () => mod({ id: 'coldstart', label: 'Hearth in cold restart', k: 'hearth', mul: 0.35, for: 1 }),
         out: `Reyes looks at you as if you have handed him something heavy and warm. “By the book,” he says. “Faster than the book. I wrote half of it.” It takes most of the span. He sleeps at the board twice, upright.`
       },
       {
-        label: 'By the book, with the whole Keel bunked in the Commons to share heat.', note: 'A cold span, faced together.',
+        label: 'By the book, with the whole Keel bunked in the Commons to share heat.', note: 'The Hearth gives almost nothing this span. A cold span, faced together.',
         fx: { morale: 2 }, tags: { commons: 1, mercy: 1 }, log: 'bunked the whole Keel in the Commons while the Hearth restarted',
         run: () => mod({ id: 'coldstart', label: 'Hearth in cold restart', k: 'hearth', mul: 0.25, for: 1 }),
         out: `Three hundred mattresses go down in rows on the Commons floor, under the Plate. Somebody brings a deck of cards. Somebody else brings an accordion, which is worse. By the end of the span the Hearth is back, and so, oddly, is something else.`
@@ -1746,13 +1748,13 @@ Object.assign(EVENTS, {
         out: `Hadley takes confinement the way he takes weather. The map goes into the charter cabinet. Within two spans every outrider in the colony can draw it from memory, and none of them learned it from you.`
       },
       {
-        label: 'Dock his rations for a span, and use the map.', note: 'Discipline, on the record. The survey stands.',
+        label: 'Dock his rations for a span, and use the map.', note: 'Discipline, on the record. The Hollows go on the map.',
         tags: { arithmetic: 1 }, trust: { hadley: -3, kovac: 2 }, log: 'docked Hadley’s rations and kept his survey',
         run: s => { s.sites.hollows.known = true; later(2, { ev: 'hollows_report', label: 'What to do about the Hollows' }); },
         out: `Half rations for a span, entered in the log, which Hadley accepts with a shrug that says he has eaten worse on the shelf. The map goes up on your office wall the same day. Kovač is not satisfied. Hadley does not seem to need him to be.`
       },
       {
-        label: 'Send him to the surgeon, and his survey to the council.', note: 'His fingers first. The argument after.',
+        label: 'Send him to the surgeon, and his survey to the council.', note: 'His fingers first, the argument after. The Hollows go on the map.',
         tags: { mercy: 1, consent: 1 }, trust: { hadley: 3 }, log: 'sent Hadley to the infirmary and his survey to the council',
         run: s => { s.sites.hollows.known = true; later(2, { ev: 'hollows_report', label: 'What to do about the Hollows' }); },
         out: `The surgeon takes the two fingers at the second knuckle, and Hadley watches the whole procedure with professional interest. The council reads his survey while he is under. By the time he wakes it has stopped arguing about whether, and started arguing about how.`
@@ -1787,7 +1789,7 @@ Object.assign(EVENTS, {
         out: `Reyes switches off the panel. The tone stops. “Twenty-six months,” he says, not to you. “She’ll go right over our heads.” He goes back to his gauges and reads them for a long time without writing anything down.`
       },
       {
-        label: 'Put the Spire to the Commons, and build it if they say so.', note: 'If they vote for it, they will carry it.',
+        label: 'Put the Spire to the Commons, and build it if they say so.', note: 'Unlocks the Spire at Signal Ridge, with the Commons behind it.',
         fx: { morale: 3 }, tags: { return: 1, consent: 1 }, log: 'let the Commons vote to build the Spire',
         run: s => { flag('spire', 'committed'); s.flags.hope = s.turn; later(16 - s.turn, { h: 'windowCloses', hidden: true, label: 'The hail window' }); },
         out: `The Commons hears the tone, then Reyes, then Dr. Adeyemi on what a Spire will cost the Racks. They vote at second bell: build it, two hundred and six hands. Reyes counts them twice, as if they were parts.`
@@ -2021,7 +2023,7 @@ Object.assign(EVENTS, {
     ],
     choices: [
       {
-        label: 'Wake them. All forty-eight, now.', note: 'Adds about 44 people to feed.', risk: 'Emergency thaw kills some',
+        label: 'Wake them. All forty-eight, now.', note: 'Adds about 44 people to feed.', logic: 'Three to five of the 48 die in the thaw.', risk: 'Emergency thaw kills some',
         fx: { morale: 3 }, tags: { wake: 2, mercy: 1 }, trust: { reyes: 4 }, log: 'woke all of Vault C in an emergency thaw',
         run: s => {
           const lost = rint(3, 5);
@@ -2037,7 +2039,7 @@ Object.assign(EVENTS, {
         out: `The lights in the Keel sag as the bus takes the load. Reyes runs the cable himself, hand over hand, up from the Hearth. The backup loop steadies. Forty-eight green lamps. He sits down on the vault floor with his back against C-31 and stays there until the shift bell.`
       },
       {
-        label: 'Twenty berths in Vault A. Draw lots for them.', note: 'Twenty-eight sleepers will die.',
+        label: 'Twenty berths in Vault A. Draw lots for them.', note: 'Twenty-eight sleepers will die.', logic: 'Twenty of the 48 keep a berth, by lot. Reyes’s husband Daniyar has a 42% chance. If he loses, so does Reyes’s trust in you.',
         fx: { morale: -5 }, tags: { mercy: 1, consent: 1 }, log: 'drew lots for twenty berths when Vault C failed',
         run: s => {
           killSleepers(28); flag('vault_c', 'lottery');
@@ -2137,7 +2139,7 @@ Object.assign(EVENTS, {
         out: `Kovač hears it at the back of the room, and you watch him decide, in real time, whether to object. He doesn’t. “The Watch will answer to the assembly,” he says. “It will be slower.” He is right, and it is.`
       },
       {
-        when: s => !s.scene.won, label: 'Offer to serve as the assembly’s executive until first light.', note: 'Their decision now. It depends on what they think of you.',
+        when: s => !s.scene.won, label: 'Offer to serve as the assembly’s executive until first light.', note: 'Their decision now.', logic: s => `Works if ${atLeast('council trust', avgTrust(s), 50)}, or ${atLeast('Moreau’s trust', s.chars.moreau.trust, 55)}: you serve the assembly until first light. Otherwise they vote you out, and your term ends here.`,
         tags: { consent: 2 }, log: 'lost the vote and offered to serve the assembly until first light',
         run: s => { s.tmp.ok = avgTrust() >= 50 || s.chars.moreau.trust >= 55; flag('election', 'held'); if (s.tmp.ok) flag('assembly'); else S.ending = 'transfer'; },
         out: s => s.tmp.ok
@@ -2335,19 +2337,19 @@ Object.assign(EVENTS, {
         out: `The heliostats fold face-down in ranks, like a field of people kneeling. The storm passes over for nine hours with a sound like poured gravel. When the mirrors open again, every one of them is whole.`
       },
       {
-        label: 'Keep collecting until the leading edge.', note: '+6 reserve power.', risk: 'The mirrors will take damage', tags: { arithmetic: 1 }, trust: { reyes: -3 }, log: 'kept the mirrors open into the glarestorm',
+        label: 'Keep collecting until the leading edge.', note: '+6 reserve power.', logic: 'The Mirror Field loses 15 to 34%.', risk: 'The mirrors will take damage', tags: { arithmetic: 1 }, trust: { reyes: -3 }, log: 'kept the mirrors open into the glarestorm',
         run: s => { gain('energy', 6); s.tmp.d = rint(15, 34); fix('mirror', -s.tmp.d); },
         out: s => `You hold them open four hours too long. The reserve fattens. Then the leading edge arrives early, and the first rank of mirrors turns to frosted glass in the time it takes to say so. The Mirror Field has lost ${s.tmp.d} points of integrity.`
       },
       {
-        label: 'Every free hand to the field with sandbags.', note: 'Hard work in a rising wind.', risk: 'Someone may be caught outside', fx: { morale: -2 }, tags: { commons: 1 }, log: 'sandbagged the Mirror Field by hand',
+        label: 'Every free hand to the field with sandbags.', note: 'Hard work in a rising wind.', logic: '20% chance someone is caught outside and dies. The Mirror Field loses 6%.', risk: 'Someone may be caught outside', fx: { morale: -2 }, tags: { commons: 1 }, log: 'sandbagged the Mirror Field by hand',
         run: s => { fix('mirror', -6); s.tmp.hurt = chance(0.2); if (s.tmp.hurt) { s.tmp.name = npc('glare' + s.turn).name; kill(1); } },
         out: s => `Two hundred people fill sandbags in a rising wind with rags tied over their faces. The pylons hold. ` + (s.tmp.hurt
           ? `${s.tmp.name} is caught in the open when the front hits, and is found afterward forty metres from the lee wall. One dead.`
           : `Everyone is back inside the lee wall with eleven minutes to spare, and for a span afterward people greet each other by showing the grit still in their ears.`)
       },
       {
-        label: 'Set the mirrors edge-on, and leave a skeleton crew to watch them.', note: 'Half the span’s mirror power. A little damage.',
+        label: 'Set the mirrors edge-on, and leave a skeleton crew to watch them.', note: 'Half the Mirror Field’s power this span. It loses 5 to 12%.',
         tags: { wrights: 1, arithmetic: 1 }, trust: { reyes: 1 }, log: 'turned the Mirror Field edge-on into the glarestorm',
         run: () => { mod({ id: 'shutter', label: 'Mirror Field edge-on through the glarestorm', k: 'mirror', mul: 0.5, for: 1 }); fix('mirror', -rint(5, 12)); },
         out: `Reyes sets the heliostats edge-on, like knives laid on their sides, and stays out with four volunteers and a wind gauge. They lose a few panels and half the span’s light, and come in looking sandpapered. Which, Reyes points out, they have been.`
@@ -2378,7 +2380,7 @@ Object.assign(EVENTS, {
         out: `Reyes strings heating cable down the melt line and feeds it straight off the bus. The lights in the Keel brown for an hour. The water runs. “That’s ten points of margin gone to melt ice,” he says, “on a planet that’s half ice.”`
       },
       {
-        label: 'Drain the wreck’s old coolant tanks to carry the Racks through.', note: 'Costs 6 parts in pumps and hose. The cut suffers while you wait.',
+        label: 'Drain the wreck’s old coolant tanks to carry the Racks through.', note: 'Costs 6 parts in pumps and hose. The Ice Works loses 16%.',
         fx: { parts: -6 }, tags: { arithmetic: 1 }, log: 'carried the Racks through the black frost on water from the wreck',
         run: () => fix('ice', -16),
         out: `The salvage crews tap the wreck’s dead coolant tanks with pumps scavenged from three different decks. The water is old and tastes of metal, and the Racks drink it anyway. The cut freezes harder while you wait, but nothing in the colony goes dry.`
@@ -2396,12 +2398,12 @@ Object.assign(EVENTS, {
     ],
     choices: [
       {
-        label: 'Seal the east dormitory.', note: 'Fewer hands on the Racks for two spans.', fx: { morale: -4 }, tags: { arithmetic: 1 }, log: 'quarantined the east dormitory',
+        label: 'Seal the east dormitory.', note: 'Fewer hands on the Racks for two spans.', logic: s => s.flags.screened >= s.turn ? 'Screening is running, so nobody dies of it.' : 'With no screening running, up to two die before it is contained.', fx: { morale: -4 }, tags: { arithmetic: 1 }, log: 'quarantined the east dormitory',
         run: s => { mod({ id: 'quarantine', label: 'East dormitory under quarantine', k: 'racks', mul: 0.88, for: 2 }); s.tmp.d = s.flags.screened >= s.turn ? 0 : rint(0, 2); if (s.tmp.d) kill(s.tmp.d); },
         out: s => `The east dormitory doors are chained from the outside and food goes in through the laundry hatch. It burns out in nine days. ` + (s.tmp.d ? `${plural(s.tmp.d, 'person', 'people')} did not come out.` : `Everyone who went in comes out, thinner.`)
       },
       {
-        label: 'Masks, and keep working. The colony cannot stop.', risk: 'It may spread', tags: { arithmetic: 1 }, trust: { adeyemi: -3 }, log: 'kept the colony working through the fever',
+        label: 'Masks, and keep working. The colony cannot stop.', logic: s => `${s.flags.screened >= s.turn ? 20 : 50}% chance it spreads: four to eight die, and morale −6. Otherwise it stops at one death.`, risk: 'It may spread', tags: { arithmetic: 1 }, trust: { adeyemi: -3 }, log: 'kept the colony working through the fever',
         run: s => { s.tmp.bad = chance(s.flags.screened >= s.turn ? 0.2 : 0.5); s.tmp.d = s.tmp.bad ? rint(4, 8) : 1; kill(s.tmp.d); if (s.tmp.bad) gain('morale', -6); },
         out: s => s.tmp.bad
           ? `It is in every dormitory inside a span. The infirmary’s six beds become sixteen pallets in the corridor. ${s.tmp.d} people die before it burns out, and the surgeon stops meeting your eye.`
@@ -2413,7 +2415,7 @@ Object.assign(EVENTS, {
         out: `The case hisses when the seal breaks, eleven light-years from where it was meant to. Sixty courses. The fever is over in four days. “I have logged a charter breach,” Patience says. “I have also logged that I would have advised it. Those are separate columns.”`
       },
       {
-        label: 'Ask for volunteers to nurse the east dormitory from inside.', note: 'Sealed, with help on the inside.', risk: 'The nurses may sicken',
+        label: 'Ask for volunteers to nurse the east dormitory from inside.', note: 'Sealed, with help on the inside.', logic: s => `The Racks lose 8% for two spans. ${s.flags.screened >= s.turn ? 'Screening is running, so nobody dies of it.' : 'With no screening running, up to two of the nurses may die.'}`, risk: 'The nurses may sicken',
         fx: { morale: 2 }, tags: { mercy: 2, consent: 1 }, log: 'sent volunteers into the sealed east dormitory to nurse the sick',
         run: s => { mod({ id: 'quarantine', label: 'East dormitory nursed from inside', k: 'racks', mul: 0.92, for: 2 }); s.tmp.d = s.flags.screened >= s.turn ? 0 : rint(0, 2); if (s.tmp.d) kill(s.tmp.d); },
         out: s => `Fourteen volunteers walk into the east dormitory with masks and blankets, and the doors are chained behind them. They nurse it from inside for two spans. ` + (s.tmp.d === 1 ? `One volunteer does not come out.` : s.tmp.d ? `${s.tmp.d} people do not come out, one of them a volunteer.` : `Everyone comes out, volunteers included, to a meal the whole Keel has saved up for.`)
@@ -2430,7 +2432,7 @@ Object.assign(EVENTS, {
     ],
     choices: [
       {
-        label: 'Dig. Everyone, in relays, until they are out.', risk: 'The face is unstable', tags: { mercy: 2 }, trust: { hadley: 3 }, log: 'dug for the trapped ice cutters',
+        label: 'Dig. Everyone, in relays, until they are out.', logic: '70% chance they are dug out alive: morale +6, and they will not forget it. Otherwise the face comes down: eight die, and morale −8. The Ice Works loses 10%.', risk: 'The face is unstable', tags: { mercy: 2 }, trust: { hadley: 3 }, log: 'dug for the trapped ice cutters',
         run: s => {
           s.tmp.ok = chance(0.7); fix('ice', -10);
           if (s.tmp.ok) { gain('morale', 6); flag('miner', 'saved'); later(rint(5, 8), { h: 'minerRepay', hidden: true, label: 'Six people who owe you their lives' }); }
@@ -2441,7 +2443,7 @@ Object.assign(EVENTS, {
           : `Nine hours in, the face lets go a second time. It takes two of the diggers with it and closes the gap for good. The pipe goes quiet a little after. Eight names for the Plate, and a silence in the Keel that lasts for days.`
       },
       {
-        label: 'Let Reyes cut in with the torch.', fx: { energy: -12 }, tags: { mercy: 1, wrights: 1 }, trust: { reyes: 2 }, log: 'cut through to the trapped ice cutters with a plasma torch',
+        label: 'Let Reyes cut in with the torch.', logic: '90% chance the six come out alive: morale +5, and they will not forget it. Otherwise all six die: morale −6. The Ice Works loses 6%.', fx: { energy: -12 }, tags: { mercy: 1, wrights: 1 }, trust: { reyes: 2 }, log: 'cut through to the trapped ice cutters with a plasma torch',
         run: s => {
           s.tmp.ok = chance(0.9); fix('ice', -6);
           if (s.tmp.ok) { gain('morale', 5); flag('miner', 'saved'); later(rint(5, 8), { h: 'minerRepay', hidden: true, label: 'Six people who owe you their lives' }); }
@@ -2457,8 +2459,8 @@ Object.assign(EVENTS, {
         out: `You give the order. The shift boss nods as if she had expected it, and hates that she did. The banging on the pipe goes on for another five hours. Half the colony stands at the cut and listens to all of it.`
       },
       {
-        label: 'Drill an air line through first. Then dig slowly.', note: 'Costs 6 parts. Safer for the diggers, slower for the trapped.', risk: 'Slow may be too slow',
-        fx: { parts: -6 }, tags: { mercy: 1, arithmetic: 1 }, trust: { hadley: 2 }, log: 'drilled air to the trapped cutters before digging',
+        label: 'Drill an air line through first. Then dig slowly.', note: 'Costs 6 parts. Safer for the diggers, slower for the trapped.', logic: '80% chance the six come out alive: morale +5, and they will not forget it. Otherwise all six die: morale −6. The Ice Works loses 8% either way.', risk: 'Slow may be too slow',
+        fx: { parts: -6 }, tags: { mercy: 1, arithmetic: 1, wrights: 1 }, trust: { hadley: 2 }, log: 'drilled air to the trapped cutters before digging',
         run: s => {
           s.tmp.ok = chance(0.8); fix('ice', -8);
           if (s.tmp.ok) { gain('morale', 5); flag('miner', 'saved'); later(rint(5, 8), { h: 'minerRepay', hidden: true, label: 'Six people who owe you their lives' }); }
@@ -2496,7 +2498,7 @@ Object.assign(EVENTS, {
         out: () => `${npc('sister').first} says all of it. Then you answer, point by point, while three hundred people listen: the face, the odds, the order, the six. She does not forgive you. But at the end she nods once, the way people nod at a debt that has at least been written down.`
       },
       {
-        label: 'Make her warden of the Ice Works, with the power to stop any shift.', note: 'The galleries will be safer. She may say no a lot.',
+        label: 'Make her warden of the Ice Works, with the power to stop any shift.', note: 'The Ice Works gains 8%. She may say no a lot.', trust: { moreau: 3, kovac: -3 }, why: { moreau: 'the people who dig should be able to stop the digging', kovac: 'it gives a stop order to someone outside the chain of command' },
         tags: { consent: 1, arithmetic: 1 }, log: 'made a dead cutter’s sister warden of the Ice Works',
         run: () => fix('ice', 8),
         out: () => `${npc('sister').first} stares at you as if you have handed her the chisel the wrong way round. Then she takes the job. For the rest of your term no crew goes into a gallery at the Ice Works without her say-so, and three times she says no.`
@@ -2560,7 +2562,7 @@ Object.assign(EVENTS, {
         out: s => `It comes apart into sixteen crates of very good fleet engineering. ${s.flags.two_fires ? 'The outrider who found it' : 'Hadley'} watches the crates go by. “Sixty-one years,” ${s.flags.two_fires ? 'she' : 'he'} says. “And we’re the ones it met.”`
       },
       {
-        label: 'Take the record, then haul the cell home as well.', note: 'Costs 10 parts and a hard span. Some of both.',
+        label: 'Take the record, then haul the cell home as well.', note: 'Costs 10 parts and a hard span. The record, and +3 power every span, in light or dark.',
         fx: { parts: -10, morale: -1 }, tags: { wrights: 1, outriders: 1 }, trust: { patience: 1 }, log: 'took the pathfinder’s record and its isotope cell',
         run: () => { flag('cairn'); mod({ id: 'rtg', label: 'Pathfinder isotope cell on the bus', k: 'energy', add: 3 }); },
         out: s => `Patience copies the record in one long breath down a cable run out across the shelf, and then the sledge team pulls the cell. The probe goes dark after sixty-one years. ` + (s.flags.two_fires ? `The outrider who found it stands beside it a while before letting them load it.` : `Hadley stands beside it a while before he lets them load it. “It did its job,” he says. “Longer than most.”`)
@@ -2616,12 +2618,12 @@ Object.assign(EVENTS, {
         out: `You take the ledger off your own desk and hold it against the wall while a rack tech drives the nails. “Two spans,” you say. The Commons gets to its feet all at once, like one animal. The pumps are running again inside the hour.`
       },
       {
-        label: 'Send in the Watch. Clear the floor.', risk: 'People will be hurt', fx: { morale: -9 }, tags: { decree: 3, watch: 2 }, infl: { kovac: 8, moreau: -8 }, log: 'broke the Commons sit-down with the Watch',
+        label: 'Send in the Watch. Clear the floor.', logic: 'One or two will die. The Racks lose 12% for three spans, and Moreau will not forget it.', risk: 'People will be hurt', fx: { morale: -9 }, tags: { decree: 3, watch: 2 }, infl: { kovac: 8, moreau: -8 }, log: 'broke the Commons sit-down with the Watch',
         run: () => { kill(rint(1, 2)); flag('broke_strike'); mod({ id: 'sullen', label: 'A sullen workforce after the sit-down was broken', k: 'racks', mul: 0.88, for: 3 }); trust('moreau', -12, 'broke the sit-down with batons'); },
         out: `It takes eleven minutes. Most of them go limp and are carried. Some do not go limp. When it is over there is blood on the floor of the Commons, in front of the Plate, and the names that will be added to it were not killed by Hesper.`
       },
       {
-        label: 'Sit down on the floor with them.', note: 'It works if they still believe a word you say.', tags: { consent: 1, mercy: 1 }, trust: { moreau: 4, kovac: -4 }, log: 'sat down with the strikers in the Commons',
+        label: 'Sit down on the floor with them.', logic: s => `Works if ${atLeast('morale', s.morale, 30)}, or if you have a record of telling the colony the truth (${s.axes.candor >= 2 ? 'you have' : 'you have not'}): morale +4. Otherwise the sit-down drags on: morale −3, and the Racks run at 60% for a span.`, tags: { consent: 1, mercy: 1 }, trust: { moreau: 4, kovac: -4 }, log: 'sat down with the strikers in the Commons',
         run: s => { s.tmp.ok = s.morale >= 30 || s.axes.candor >= 2; if (s.tmp.ok) gain('morale', 4); else { gain('morale', -3); mod({ id: 'sitdown', label: 'The sit-down drags on', k: 'racks', mul: 0.6, for: 1 }); } },
         out: s => s.tmp.ok
           ? `You sit, in the third row, between an ice cutter and a woman with a baby. Nobody knows what to do with that, Moreau included. So they talk. It goes on for six hours and settles nothing on paper. But at the end of it they get up and go back to the pumps, and several of them nod to you as they pass.`
@@ -2650,7 +2652,7 @@ Object.assign(EVENTS, {
         out: `You sign. Kovač reads your signature as if checking it for forgery. “Thank you, Governor,” he says, and for the first time he sounds tired instead of hard. By the next bell there are constables on the Racks, the Stores and the lock. Everything runs. Nothing is said.`
       },
       {
-        label: 'Refuse, and face him down.', risk: 'It depends on who will stand with you', tags: { consent: 2 }, log: 'refused the Watch emergency powers',
+        label: 'Refuse, and face him down.', logic: s => `Works if ${atLeast('morale', s.morale, 40)}, ${atLeast('Moreau’s trust', s.chars.moreau.trust, 55)}, or an assembly is sitting (${s.flags.assembly ? 'one is' : 'none is'}): Kovač stands down, and morale +3. Otherwise the Watch takes the Keel, and your term ends here.`, risk: 'It depends on who will stand with you', tags: { consent: 2 }, log: 'refused the Watch emergency powers',
         run: s => {
           s.tmp.ok = s.morale >= 40 || s.chars.moreau.trust >= 55 || !!s.flags.assembly;
           if (s.tmp.ok) { infl('kovac', -18); gain('morale', 3); trust('kovac', 8, 'faced him down and did not break'); } else S.ending = 'coup';
@@ -2665,7 +2667,7 @@ Object.assign(EVENTS, {
         out: `Kovač reads the amended order twice. “A term,” he says. “With an end written on it.” He looks, briefly, almost grateful. “I have wanted an end written on it for four hundred days.” He signs beneath your name.`
       },
       {
-        label: 'Call the council into the room, now, and let him make his case to all of them.', note: 'It depends on what the council thinks of you.', risk: 'They may side with him',
+        label: 'Call the council into the room, now, and let him make his case to all of them.', logic: s => `Works if ${atLeast('council trust', avgTrust(s), 45)}: the council votes him down, and the Watch answers to it. Otherwise the council gives Kovač full authority for the Dimming.`, risk: 'They may side with him',
         tags: { consent: 2, candor: 1 }, log: 'made Kovač argue for emergency powers before the whole council',
         run: s => { s.tmp.ok = avgTrust() >= 45; if (s.tmp.ok) { infl('kovac', -12); trust('kovac', 4, 'made him argue his case before the council'); } else { flag('martial_dim'); infl('kovac', 6); } },
         out: s => s.tmp.ok
@@ -2689,7 +2691,7 @@ Object.assign(EVENTS, {
         out: `You have the stores opened and count out their share yourself. Hadley watches you do it. At the lock he stops and, after a visible struggle, puts out his hand. “There’ll be a lamp at the Hollows,” he says. “If the ridge goes bad, you’ll see it from the shelf.”`
       },
       {
-        label: 'Bar the lock. Nobody leaves.', risk: 'They may go anyway, unsupplied', fx: { morale: -6 }, tags: { decree: 2, watch: 2 }, log: 'barred the lock against Hadley’s exodus',
+        label: 'Bar the lock. Nobody leaves.', logic: '55% chance they go anyway, unsupplied: four to nine die on the shelf, and the rest reach the Hollows.', risk: 'They may go anyway, unsupplied', fx: { morale: -6 }, tags: { decree: 2, watch: 2 }, log: 'barred the lock against Hadley’s exodus',
         run: s => {
           s.tmp.slip = chance(0.55); trust('hadley', -10, 'barred the lock against his people');
           if (s.tmp.slip) { const d = rint(4, 9); kill(d); gain('pop', -(40 - d)); leaveForHollows(40 - d); }
@@ -2699,7 +2701,7 @@ Object.assign(EVENTS, {
           : `The constables hold the lock, and after a long, bad hour the outriders stand down and unload their sledges. Hadley does not look at you. From that span on, no survey report reaches your desk that tells you anything you did not already know.`
       },
       {
-        label: 'Walk out onto the shelf with them, and ask them to stay.', note: 'It works if the colony still has some heart in it.', tags: { candor: 1 }, log: 'walked onto the shelf to ask Hadley’s people to stay',
+        label: 'Walk out onto the shelf with them, and ask them to stay.', logic: s => `Works if ${atLeast('morale', s.morale, 45)}: they stay. Otherwise forty leave anyway, with 6 food.`, tags: { candor: 1 }, log: 'walked onto the shelf to ask Hadley’s people to stay',
         run: s => {
           s.tmp.ok = s.morale >= 45;
           if (s.tmp.ok) { trust('hadley', 14, 'walked out onto the shelf to ask him to stay'); if (s.flags.hollows !== 'refuge') flag('hollows', 'refuge'); }
@@ -2710,7 +2712,7 @@ Object.assign(EVENTS, {
           : `You walk out with them, two kilometres onto the shelf. You say everything there is to say. Hadley hears you out. “It’s a good speech,” he says. “You should have made it four spans ago.” He takes his share of the stores and goes. You walk back alone, and the lights of the Keel look very few.`
       },
       {
-        label: 'Let them go, and send a radio and a trained Wright with them.', note: 'Forty people leave the ridge. The line between you stays open.',
+        label: 'Let them go, and send a radio and a trained Wright with them.', note: 'Forty people leave the ridge, with 8 food. The line between you stays open.',
         fx: { pop: -40, parts: -6 }, tags: { mercy: 1, outriders: 1, roots: 1 }, trust: { hadley: 10, reyes: -2 }, log: 'let Hadley’s people go to the Hollows with a radio and a Wright',
         run: () => { gain('food', -8); gain('morale', 2); leaveForHollows(40); },
         out: `You count out their stores, and then add a radio set and a young Wright described in Reyes’s report as “annoyingly competent.” Hadley shakes your hand at the lock, which he has never done. Two days later the radio crackles: they are in, it is fourteen degrees, and someone wants to know where the soup ladle went.`
@@ -2834,7 +2836,7 @@ Object.assign(EVENTS, {
         out: `“Off the books,” Reyes says. “I can do off the books.” By the end of the span there is a surveyor’s stake on Signal Ridge and a pile of scrap under a tarpaulin that Bao insists he has never seen. Reyes has started whistling, which nobody has heard him do before.`
       },
       {
-        label: 'Put it to the Commons. If they want a door, they build it.', note: 'It depends on whether they still want to leave.',
+        label: 'Put it to the Commons. If they want a door, they build it.', logic: s => `Works if ${atLeast('morale', s.morale, 40)}, or if your term has leaned toward leaving over putting down roots (${s.axes.horizon <= 0 ? 'it has' : 'it has not'}): the Commons votes for the Spire, and it unlocks at Signal Ridge. Otherwise there is no Spire.`,
         tags: { consent: 2 }, log: 'put Reyes’s Spire to the Commons',
         run: s => { s.tmp.ok = s.morale >= 40 || s.axes.horizon <= 0; if (s.tmp.ok) { flag('spire', 'committed'); s.flags.hope = s.turn; later(Math.max(1, 16 - s.turn), { h: 'windowCloses', hidden: true, label: 'The hail window' }); } },
         out: s => s.tmp.ok
@@ -2864,8 +2866,8 @@ Object.assign(EVENTS, {
         out: `You stand beside him, at something like attention, for the better part of an hour. Neither of you speaks. When the shift bell goes he says, “Governor,” and nothing else, and it is the warmest word you have had from him.`
       },
       {
-        label: '“Teach me the calculation.”', note: 'Let him show you.',
-        tags: { candor: 1 }, trust: { kovac: 5 }, log: 'asked Kovač to teach you the landing calculation',
+        label: '“Teach me the calculation.”', note: 'Let him show you.', why: { kovac: 'you asked to carry the arithmetic with him, not to be spared it' },
+        tags: { candor: 1 }, trust: { kovac: 6 }, log: 'asked Kovač to teach you the landing calculation',
         out: `He looks at you sidelong. Then he takes a stub of chalk from his pocket and works it on the bare steel below the names, from memory, line by line. It comes out the same. He wipes it away with his sleeve. “Now there are two of us who know,” he says, and it sounds like thanks.`
       }
     ]
@@ -2942,7 +2944,7 @@ Object.assign(EVENTS, {
         out: `“No,” Reyes says, not unkindly. “You don’t. Nobody could. But it’s the right thing to say.” He pats the pod twice, the way you would settle a horse, and walks you back.`
       },
       {
-        label: 'Have a spare chiller pump racked beside Vault C.', note: 'Costs 6 parts. The vaults run a little safer.',
+        label: 'Have a spare chiller pump racked beside Vault C.', note: 'Costs 6 parts. The Wreck gains 8%, and the vaults run a little safer.',
         fx: { parts: -6 }, tags: { sleepers: 1 }, trust: { reyes: 4 }, log: 'had a spare chiller racked beside Daniyar’s pod',
         run: () => fix('wreck', 8),
         out: `You sign for the pump that afternoon. Reyes fits it himself, bolted to the frame beside C-31, where he can see it from the door. “Probably useless,” he says, tightening the last bolt a quarter turn more than it needs. “Thank you.”`
@@ -3134,7 +3136,7 @@ Object.assign(EVENTS, {
         out: `You add the line in your own hand, under hers, and sign below it. Moreau reads it twice. “You know you might lose,” she says. “That is the point of it,” you say. She laughs, short and surprised, and pins it to the Plate herself.`
       },
       {
-        label: 'Take it to the council. Sign it only if they back it.', note: 'It depends on whether they trust you.',
+        label: 'Take it to the council. Sign it only if they back it.', logic: s => `Works if ${atLeast('council trust', avgTrust(s), 50)}: the council signs it, and morale +3. Otherwise they hand it back unsigned: morale −2.`, trust: { kovac: 4, moreau: -4 }, why: { kovac: 'the council, not the crowd, should decide what the Governor signs', moreau: 'the Commons asked you for a signature, not for a vote on whether to give one' },
         tags: { consent: 1, decree: 1 }, log: 'put the charter amendment to the council',
         run: s => { s.tmp.ok = avgTrust() >= 50; if (s.tmp.ok) { flag('pledged'); flag('assembly_due'); gain('morale', 3); } else gain('morale', -2); },
         out: s => s.tmp.ok
@@ -3221,7 +3223,7 @@ Object.assign(EVENTS, {
     },
     choices: [
       {
-        label: 'Half heat in the dormitories.', note: 'Saves power for two spans.', risk: 'The old and the sick will die of it', fx: { morale: -6 }, tags: { arithmetic: 1 }, log: 'put the dormitories on half heat',
+        label: 'Half heat in the dormitories.', note: 'Saves power for two spans.', logic: 'Two to five of the old and sick will die of it.', risk: 'The old and the sick will die of it', fx: { morale: -6 }, tags: { arithmetic: 1 }, log: 'put the dormitories on half heat',
         run: s => { mod({ id: 'halfheat', label: 'Dormitories on half heat', k: 'energyUse', mul: 0.84, for: 2 }); s.tmp.d = kill(rint(2, 5), 'cold'); },
         out: s => `The dormitory ring drops to four degrees. People sleep three to a bunk in every coat they own. ${plural(s.tmp.d, 'person', 'people')}, old or already ill, do not get up at the bell. Their bunkmates carry them to the Plate themselves.`
       },
@@ -3240,7 +3242,7 @@ Object.assign(EVENTS, {
         out: s => `“I will comply,” Patience says. “I am recording that I advised otherwise. I am recording the pod numbers.” Over two spans, ${plural(s.tmp.d, 'lamp')} in the vaults ${s.tmp.d === 1 ? 'goes' : 'go'} from green to amber to nothing. The people in the Keel are warm, and do not ask why.`
       },
       {
-        label: 'Nothing goes cold. Run the Hearth past her plate rating.', note: 'A quarter more output for two spans. The Hearth pays for it.', risk: 'She may scram',
+        label: 'Nothing goes cold. Run the Hearth past her plate rating.', note: 'A quarter more output for two spans. The Hearth pays for it.', logic: 'The Hearth loses 28%. 25% chance she scrams anyway: −22 reserve power.', risk: 'She may scram',
         req: s => s.sites.hearth.integ >= 55 || 'The Hearth is too worn to push', tags: { mercy: 1 }, trust: { reyes: -3 }, log: 'ran the Hearth past its rating so nothing would go cold',
         run: s => { mod({ id: 'overdrive', label: 'Hearth run past plate rating', k: 'hearth', mul: 1.25, for: 2 }); fix('hearth', -28); s.tmp.bad = chance(0.25); if (s.tmp.bad) gain('energy', -22); },
         out: s => s.tmp.bad
@@ -3280,8 +3282,8 @@ Object.assign(EVENTS, {
         out: `The constables take the sledge. Bao does not resist. He stands in the lock with his hands open at his sides, smiling slightly, like a man watching a customer overpay. “You’ll find,” he says, “that it was the last of it. You’ll never be sure.”`
       },
       {
-        when: s => s.chars.bao.trust >= 50, label: 'Take it, and give him the credit at the Plate.', note: 'He asked you not to.',
-        fx: { food: 16, parts: 14, morale: 6 }, tags: { candor: 1 }, trust: { bao: 2 }, log: 'accepted Bao’s cache and thanked him at the Plate',
+        when: s => s.chars.bao.trust >= 50, label: 'Take it, and give him the credit at the Plate.', note: 'He asked you not to.', why: { bao: 'he will hate the attention for a minute, and remember the thanks for a year' },
+        fx: { food: 16, parts: 14, morale: 6 }, tags: { candor: 1 }, trust: { bao: 4 }, log: 'accepted Bao’s cache and thanked him at the Plate',
         out: `You thank him at the Plate, by name, with the whole Commons listening. Bao looks as though you have picked his pocket in public. Then, despite himself, he beams through every second of it.`
       },
       {
@@ -3308,7 +3310,7 @@ Object.assign(EVENTS, {
         out: `You stand beside him, shoulder to shoulder, in front of a locked door. For a long minute nobody moves. Then Kovač says, in a parade-ground voice, “The count is posted every span. I will read it to you now, line by line, and any one of you may come in with me and check it.” He does. It takes an hour. The pry bar is left leaning against the wall.`
       },
       {
-        label: '“Twelve constables. Do not risk yourself.”', risk: 'Someone may be hurt', fx: { morale: -3 }, tags: { decree: 1, watch: 1 }, log: 'held the stores door with the Watch',
+        label: '“Twelve constables. Do not risk yourself.”', logic: '40% chance it ends with a death.', risk: 'Someone may be hurt', fx: { morale: -3 }, tags: { decree: 1, watch: 1 }, log: 'held the stores door with the Watch',
         run: s => { s.tmp.d = chance(0.4) ? kill(1) : 0; },
         out: s => `The constables come at the double and the crowd breaks. ${s.tmp.d ? 'One man goes down on the ice and does not get up. ' : ''}Kovač watches it without expression. “It held,” he says. “That is all one can say for it.”`
       },
@@ -3319,7 +3321,7 @@ Object.assign(EVENTS, {
       },
       {
         label: 'Serve them a half-ration from the doorway. Tonight only.', note: 'Costs 6 food.',
-        fx: { food: -6, morale: 3 }, tags: { mercy: 1 }, trust: { kovac: -1 }, log: 'fed a frightened crowd at the stores door',
+        fx: { food: -6, morale: 3 }, tags: { mercy: 1 }, trust: { kovac: -1, moreau: 1 }, log: 'fed a frightened crowd at the stores door',
         out: `Kovač holds the door and you hand out bricks from it, one each, until the crowd has become a queue and the queue has become sixty people eating in the cold. Someone says thank you. Then everyone does, and goes home.`
       }
     ]
@@ -3422,18 +3424,18 @@ Object.assign(EVENTS, {
         out: `The lee wall of the Keel blazes for eleven hours, a white bar in the absolute dark, visible for thirty kilometres. They come in along it at the turn of the shift: Hadley in front, breaking trail, and behind him on one rope all nine, walking. He takes his goggles off and looks up at the lamps. “That’ll do,” he says. “You can turn them off now.”`
       },
       {
-        label: '“I cannot spend the power. Go carefully.”', risk: 'Some will not be found', tags: { arithmetic: 1 }, trust: { hadley: -3 }, log: 'refused the power to light a lost party home',
+        label: '“I cannot spend the power. Go carefully.”', logic: 'Two to five will not be found. Morale −3.', risk: 'Some will not be found', tags: { arithmetic: 1 }, trust: { hadley: -3 }, log: 'refused the power to light a lost party home',
         run: s => { s.tmp.d = kill(rint(2, 5), 'cold'); gain('morale', -3); },
         out: s => `He goes without the lamps. He finds them by dead reckoning and stubbornness, eleven kilometres out, and brings back those he can. ${plural(s.tmp.d, 'person', 'people')} ${s.tmp.d === 1 ? 'stays' : 'stay'} on the shelf. Hadley does not reproach you. He just looks at the dark lee wall for a moment before he goes in.`
       },
       {
-        label: 'Rope up and go out on the line with him.', note: 'Drains 4 reserve power for half the lamps. You on the line.', risk: 'Forty below',
+        label: 'Rope up and go out on the line with him.', note: 'Drains 4 reserve power for half the lamps. You on the line.', logic: '25% chance someone dies on the line. Morale +4 either way.', risk: 'Forty below',
         tags: { mercy: 1, outriders: 1 }, trust: { hadley: 6, kovac: -3 }, log: 'went out on the lamp line with Hadley',
         run: s => { gain('energy', -4); s.tmp.d = chance(0.25) ? kill(1, 'cold') : 0; gain('morale', 4); },
         out: s => `Hadley looks at you once, hands you a line, and clips you in behind him. Eleven hours on the shelf. You find them in a snow-cave a kilometre off the line, alive, singing to stay awake. ` + (s.tmp.d ? `One of them does not survive the walk back. You carry the body the last stretch yourself.` : `All nine walk in. You cannot feel your feet for a day.`)
       },
       {
-        label: 'Light half the lamps, and ring the Keel bell every quarter hour.', note: 'Drains 4 reserve power.', risk: 'Half a beacon',
+        label: 'Light half the lamps, and ring the Keel bell every quarter hour.', note: 'Drains 4 reserve power.', logic: '35% chance one or two are lost in the dark: morale +1. Otherwise everyone follows the bell home: morale +4.', risk: 'Half a beacon',
         tags: { arithmetic: 1, mercy: 1 }, trust: { hadley: 1 }, log: 'lit half the lee wall and rang the bell for a lost party',
         run: s => { gain('energy', -4); s.tmp.d = chance(0.35) ? kill(rint(1, 2), 'cold') : 0; gain('morale', s.tmp.d ? 1 : 4); },
         out: s => `The bell goes every quarter hour for eleven hours, until nobody in the Keel can sleep and nobody wants to. Hadley brings them in by the sound as much as the light. ` + (s.tmp.d === 1 ? `One of them does not make it.` : s.tmp.d ? `Two of them do not make it.` : `All nine walk in, deaf and grinning.`)
@@ -3572,7 +3574,7 @@ Object.assign(EVENTS, {
         out: `“A staged waking,” Patience says. “Yes. I can make that safe.” The first pods open within the shift, and the vault fills with the sound of children demanding breakfast. The rest sleep on, under a date chalked on the vault door that everyone means to keep.`
       },
       {
-        when: s => s.flags.doctrine === 'sleep', label: '“The waking colony decides. They kept the vaults; they have earned the vote.”', tags: { consent: 1 }, log: 'let the waking colony decide whether to end the Long Sleep',
+        when: s => s.flags.doctrine === 'sleep', label: '“The waking colony decides. They kept the vaults; they have earned the vote.”', logic: s => `Works if ${atLeast('morale', s.morale, 35)}: they vote to wake everyone. Otherwise they vote to keep the vaults sealed.`, tags: { consent: 1 }, log: 'let the waking colony decide whether to end the Long Sleep',
         run: s => { s.tmp.ok = s.morale >= 35; flag(s.tmp.ok ? 'sleep_ended' : 'long_sleep'); },
         out: s => s.tmp.ok
           ? `They vote at the vault doors, by lamplight, with the sun coming up behind them. Wake them, all of them, by a margin nobody bothers to count. Patience begins the cycle before the last hand is down.`
@@ -3816,7 +3818,7 @@ Object.assign(EVENTS, {
         out: () => `Dr. Adeyemi puts ${npc('thief').first} on the night shift and works him until he falls asleep standing up. He is good, it turns out. By the end of the span he is the one catching everyone else’s mistakes, and his mother’s cough has turned the corner.`
       },
       {
-        label: 'Let his own dormitory decide what he owes.', note: 'It depends on whether the dormitory can agree.',
+        label: 'Let his own dormitory decide what he owes.', logic: s => `Works if ${atLeast('morale', s.morale, 35)}: the dormitory settles it. Otherwise it ends in a scuffle and the Watch: morale −2.`,
         tags: { consent: 1, commons: 1 }, trust: { moreau: 2 }, log: 'let a ration thief’s dormitory decide his sentence',
         run: s => { s.tmp.ok = s.morale >= 35; if (!s.tmp.ok) gain('morale', -2); },
         out: s => s.tmp.ok
@@ -3835,7 +3837,7 @@ Object.assign(EVENTS, {
     ],
     choices: [
       {
-        label: 'Cut in now, carefully.', note: '+14 parts.', risk: 'The vault feed is close',
+        label: 'Cut in now, carefully.', note: '+14 parts.', logic: '25% chance the cut nicks the vault feed: the Wreck loses 15%.', risk: 'The vault feed is close',
         fx: { parts: 14 }, tags: { arithmetic: 1 }, trust: { patience: -2 }, log: 'had the frozen engineering deck cut open at once',
         run: s => { s.tmp.bad = chance(0.25); if (s.tmp.bad) fix('wreck', -15); },
         out: s => s.tmp.bad
@@ -3977,7 +3979,7 @@ Object.assign(EVENTS, {
         out: `Reyes lays heating cable under the vault deck and the heave stops within two shifts. The seals are still cracked, but they stop getting worse. “Treating the symptom,” Patience observes. “Sometimes that is medicine.”`
       },
       {
-        label: 'Move the three pods into empty berths in Vault A.', note: 'Free. Moving a live pod is never safe.', risk: 'A sleeper may die',
+        label: 'Move the three pods into empty berths in Vault A.', note: 'Free. Moving a live pod is never safe.', logic: '40% chance one sleeper dies in the move. The Wreck gains 4% either way.', risk: 'A sleeper may die',
         tags: { arithmetic: 1 }, trust: { patience: -1 }, log: 'moved three cracked pods into Vault A',
         run: s => { s.tmp.d = chance(0.4) ? killSleepers(1) : 0; fix('wreck', 4); },
         out: s => s.tmp.d
@@ -4045,7 +4047,7 @@ Object.assign(EVENTS, {
         out: `Reyes receives two apprentices with the warmth of a man receiving two head colds. He is a terrible teacher for one span and a merely bad one for the next. By the third he has started calling them “my two,” and defending them to anyone who will listen.`
       },
       {
-        label: 'Let him work. The Hearth needs him more than he needs sleep.', note: 'No cost now.', risk: 'Tired hands make mistakes',
+        label: 'Let him work. The Hearth needs him more than he needs sleep.', note: 'No cost now.', logic: '30% chance of a tired mistake: the Hearth loses 12%.', risk: 'Tired hands make mistakes',
         tags: { arithmetic: 1 }, trust: { reyes: 2 }, log: 'let Reyes keep working through his exhaustion',
         run: s => { s.tmp.bad = chance(0.3); if (s.tmp.bad) fix('hearth', -12); },
         out: s => s.tmp.bad
@@ -4143,7 +4145,7 @@ Object.assign(EVENTS, {
         out: `The north cut is roped off and left to the dark. The near face is grey with grit and the filters clog twice a shift. It is water. It is not good water. Dr. Adeyemi tastes it and makes a face that the whole Racks crew learns to imitate.`
       },
       {
-        label: 'Rope it, and carry the ice across by hand.', note: 'Hard labor. No parts spent.', risk: 'Someone may fall',
+        label: 'Rope it, and carry the ice across by hand.', note: 'Hard labor. No parts spent.', logic: '15% chance someone falls to their death.', risk: 'Someone may fall',
         fx: { morale: -3 }, tags: { commons: 1 }, log: 'had ice carried across the crevasse by hand',
         run: s => { s.tmp.d = chance(0.15) ? kill(1) : 0; },
         out: s => s.tmp.d
@@ -4151,7 +4153,7 @@ Object.assign(EVENTS, {
           : `For a span the ice crosses on a rope line, block by block, on people’s backs. Nobody falls. The haulers come off shift with shoulders like stone and a new song about the crevasse, which is ruder than it is good.`
       },
       {
-        label: 'Blast the lip and fill it.', note: 'Costs 4 parts in charges.', risk: 'The shelf may slump',
+        label: 'Blast the lip and fill it.', note: 'Costs 4 parts in charges.', logic: '60% chance it holds: the Ice Works gains 10%. Otherwise the shelf slumps, and it loses 20%.', risk: 'The shelf may slump',
         fx: { parts: -4 }, tags: { arithmetic: 1 }, log: 'had the crevasse blasted and filled',
         run: s => { s.tmp.ok = chance(0.6); fix('ice', s.tmp.ok ? 10 : -20); },
         out: s => s.tmp.ok
@@ -4215,7 +4217,7 @@ Object.assign(EVENTS, {
         out: `You read it out exactly, to three hundred people, and then you say what you think of it. You do not raise your voice. You do not need to. By the end of the shift there are forty names chalked on Moreau’s door around the scratches, and a second message under them, much longer.`
       },
       {
-        label: 'Have the Watch find who did it, quietly.', note: 'It may find them. It may find nothing.',
+        label: 'Have the Watch find who did it, quietly.', logic: '60% chance the Watch finds who did it. Otherwise it finds only resentment.',
         tags: { sealed: 1, watch: 1 }, trust: { kovac: 2 }, log: 'had the Watch quietly hunt for whoever threatened Moreau',
         run: s => { s.tmp.ok = chance(0.6); },
         out: s => s.tmp.ok
@@ -4262,7 +4264,7 @@ Object.assign(EVENTS, {
     ],
     choices: [
       {
-        label: 'Everyone out on the shelf, in lines.', note: 'A shift lost on the Racks.',
+        label: 'Everyone out on the shelf, in lines.', note: 'A shift lost on the Racks.', logic: '92% chance the child is found alive.',
         fx: { morale: 2 }, tags: { mercy: 1, commons: 1 }, log: 'sent the whole colony out to search the shelf',
         run: s => { s.tmp.ok = chance(0.92); if (!s.tmp.ok) kill(1, 'cold'); mod({ id: 'search', label: 'A shift lost searching the shelf', k: 'racks', mul: 0.94, for: 1 }); },
         out: s => s.tmp.ok
@@ -4270,7 +4272,7 @@ Object.assign(EVENTS, {
           : `Two hundred people walk the shelf in lines until the wind drives them in. They find ${s.scene.kid} at first shift, a kilometre out, in the lee of a pressure ridge, and carry the small body home in a line that does not break.`
       },
       {
-        label: 'Send the outriders. They know the shelf.', note: 'Fast and skilled. Few hands.',
+        label: 'Send the outriders. They know the shelf.', note: 'Fast and skilled. Few hands.', logic: s => `${s.flags.two_fires ? 75 : 88}% chance the child is found alive.`,
         tags: { outriders: 1 }, trust: { hadley: 2 }, log: 'sent the outriders after a lost child',
         run: s => { s.tmp.ok = chance(s.flags.two_fires ? 0.75 : 0.88); if (!s.tmp.ok) kill(1, 'cold'); },
         out: s => s.tmp.ok
@@ -4278,7 +4280,7 @@ Object.assign(EVENTS, {
           : `The outriders follow the prints until the wind fills them in. They search until the wind drives them back, go out again at first shift, and find what they were afraid they would find.`
       },
       {
-        label: 'Light every lamp on the lee wall, and wait.', note: 'Costs 8 reserve power. A beacon to walk home to.',
+        label: 'Light every lamp on the lee wall, and wait.', note: 'Costs 8 reserve power. A beacon to walk home to.', logic: '80% chance the child is found alive.',
         fx: { energy: -8 }, tags: { mercy: 1 }, log: 'lit the lee wall to guide a lost child home',
         run: s => { s.tmp.ok = chance(0.8); if (!s.tmp.ok) kill(1, 'cold'); },
         out: s => s.tmp.ok
@@ -4286,7 +4288,7 @@ Object.assign(EVENTS, {
           : `The lee wall blazes until the reserve runs low, and then Reyes, without being asked, keeps it burning anyway. Nobody comes walking out of the dark. They find ${s.scene.kid} at first shift, two hundred metres from the light.`
       },
       {
-        label: 'The Watch searches. Nobody else goes out.', note: 'No more lives risked.', risk: 'Fewer eyes on the shelf',
+        label: 'The Watch searches. Nobody else goes out.', note: 'No more lives risked.', logic: '65% chance the child is found alive.', risk: 'Fewer eyes on the shelf',
         fx: { morale: -2 }, tags: { decree: 1, watch: 1, arithmetic: 1 }, trust: { kovac: 2 }, log: 'kept the colony inside while the Watch searched for a lost child',
         run: s => { s.tmp.ok = chance(0.65); if (!s.tmp.ok) kill(1, 'cold'); },
         out: s => s.tmp.ok
@@ -4344,7 +4346,7 @@ Object.assign(EVENTS, {
         out: `Dr. Adeyemi takes the half without arguing, which tells you how badly she needed it. The youngest lines climb. The older ones hold. She keeps both charts on her bench, side by side, where you will see them when you come by.`
       },
       {
-        label: 'Publish the chart. Let the colony decide what to give.', note: 'It depends on what the colony has left to give.',
+        label: 'Publish the chart. Let the colony decide what to give.', logic: s => `Works if ${atLeast('morale', s.morale, 35)}: the colony gives 6 food, and morale +4. Otherwise nobody can spare any: morale −2.`,
         tags: { candor: 2, consent: 1 }, trust: { adeyemi: 2 }, log: 'published the children’s growth charts to the colony',
         run: s => { s.tmp.ok = s.morale >= 35; if (s.tmp.ok) { gain('food', -6); gain('morale', 4); } else gain('morale', -2); },
         out: s => s.tmp.ok
@@ -4385,7 +4387,7 @@ Object.assign(EVENTS, {
         out: `Four constables stand at the Tally House doors instead of two, in plain sight. Nothing happens. The group in the east dormitory, presumably, can count.`
       },
       {
-        label: 'Walk into the east dormitory yourself, unannounced.', note: 'It depends on whether they still believe you.', risk: 'They may not listen',
+        label: 'Walk into the east dormitory yourself, unannounced.', logic: s => `Works if ${atLeast('morale', s.morale, 30)}, or ${atLeast('council trust', avgTrust(s), 48)}: they hear you out, and morale +2. Otherwise the Tally House is robbed of 8 food: morale −2.`, risk: 'They may not listen',
         tags: { candor: 1, mercy: 1 }, log: 'went alone to face the group planning to raid the stores',
         run: s => { s.tmp.ok = s.morale >= 30 || avgTrust() >= 48; if (s.tmp.ok) gain('morale', 2); else { gain('food', -8); gain('morale', -2); } },
         out: s => s.tmp.ok
@@ -4483,7 +4485,7 @@ Object.assign(EVENTS, {
         out: `“One loop,” Reyes says, “in the coldest weeks of the year. You understand you’re asking her to run on one lung.” He does it anyway, and spends the next two spans sleeping beside the board.`
       },
       {
-        label: 'Send the Wrights out with torches, in shifts, until it runs.', note: 'Free. Brutal work outside.', risk: 'Forty below on the line',
+        label: 'Send the Wrights out with torches, in shifts, until it runs.', note: 'Free. Brutal work outside.', logic: '20% chance someone dies on the line. The Hearth gains 3%.', risk: 'Forty below on the line',
         fx: { morale: -2 }, tags: { commons: 1 }, log: 'had the Wrights thaw the return line by hand',
         run: s => { s.tmp.d = chance(0.2) ? kill(1, 'cold') : 0; fix('hearth', 3); },
         out: s => s.tmp.d
@@ -4546,7 +4548,7 @@ Object.assign(EVENTS, {
         out: `The dormitories blaze at full light all day and all night, and the walking stops. The surgeon says it is not the light, exactly. Reyes says it is exactly the light, and shows you the reserve, and you both look at it for a while.`
       },
       {
-        label: 'Let the surgeon treat it as an illness, case by case.', note: 'No cost now.', risk: 'Someone else may walk',
+        label: 'Let the surgeon treat it as an illness, case by case.', note: 'No cost now.', logic: '35% chance someone else walks out into the cold and dies.', risk: 'Someone else may walk',
         tags: { arithmetic: 1 }, log: 'left the dark sickness to the surgeon',
         run: s => { s.tmp.d = chance(0.35) ? kill(1, 'cold') : 0; },
         out: s => s.tmp.d
@@ -4563,7 +4565,7 @@ Object.assign(EVENTS, {
     ],
     choices: [
       {
-        label: 'Everyone out, in shifts, wrapped in everything.', note: 'Forty below, and worth it.', risk: 'Someone may stay out too long',
+        label: 'Everyone out, in shifts, wrapped in everything.', note: 'Forty below, and worth it.', logic: '15% chance someone stays out too long and dies.', risk: 'Someone may stay out too long',
         fx: { morale: 6 }, tags: { roots: 1, commons: 1 }, log: 'let the whole colony out to see the aurora',
         run: s => { s.tmp.d = chance(0.15) ? kill(1, 'cold') : 0; },
         out: s => `They go out in shifts of thirty, roped in lines, and stand on the shelf with their heads back until the constables call time. ` + (s.tmp.d ? `One old cutter slips off the line to watch alone, and is found at the end of the shift sitting upright, smiling, gone.` : `Everybody comes back. For a span afterward people greet each other by holding up their hands and moving their fingers like curtains.`)
@@ -4604,13 +4606,13 @@ Object.assign(EVENTS, {
         out: `The infirmary goes from four degrees to eighteen in a shift. The coughing does not stop, but it loosens. The surgeon takes off the coat for the first time in a span, and falls asleep sitting on a crate.`
       },
       {
-        label: 'Send the sick home to their bunks, with blankets.', note: 'Free. The weakest may not last.',
+        label: 'Send the sick home to their bunks, with blankets.', note: 'Free. The weakest may not last.', logic: 'One to three of the sick will die.',
         fx: { morale: -2 }, tags: { arithmetic: 1 }, log: 'sent the sick back to their dormitories',
         run: s => { s.tmp.d = kill(rint(1, 3), 'cold'); },
         out: s => `The pallets are cleared and the sick go back to their bunks with every blanket the stores can spare. Their bunkmates nurse them, and mostly it is enough. ` + (s.tmp.d === 1 ? `One is not found warm in the morning.` : s.tmp.d ? `${s.tmp.d} are not found warm in the morning.` : `Everyone is found warm in the morning.`)
       },
       {
-        label: 'Borrow power from the vault margin.', note: '+6 reserve power.', risk: 'A sleeper may die',
+        label: 'Borrow power from the vault margin.', note: '+6 reserve power.', logic: '40% chance one or two sleepers die.', risk: 'A sleeper may die',
         req: s => s.sleepers > 0 || 'The vaults are empty',
         fx: { energy: 6 }, tags: { arithmetic: 1, mercy: 1 }, trust: { patience: -6 }, log: 'borrowed power from the vault margin for the cold ward',
         run: s => { s.tmp.d = chance(0.4) ? killSleepers(rint(1, 2)) : 0; },
@@ -4707,6 +4709,7 @@ function guideHTML() {
 
   const decide = `<ul>
     <li>Chips under an option show what happens at once: ▲ is a gain, ▼ is a loss. An amber chip is a risk, and its result is not certain.</li>
+    <li>A line marked with the branching arrow is a gamble. It says what decides the outcome, where the colony stands on it now, and what happens either way.</li>
     <li><b>Backs</b> and <b>Opposes</b> show which councillors will gain or lose trust in you. Tick “Show the council’s reasoning” under the options to read why.</li>
     <li>A greyed-out option says what it needs: parts, reserve power, or something you have not built.</li>
     <li>After you choose, the outcome lists what changed and how the council reacted.</li>
@@ -5129,6 +5132,10 @@ function evHead(ev) {
   return `<div class="ev-head"><span class="chip eyebrow k-${k}">${kg(k)}${KNAME[k]}</span>${site ? `<span class="where">${ico('map')} ${esc(site)}</span>` : ''}<span class="when">${S.turn === 0 ? 'Day ' + START_DAY : S.turn > LAST_SPAN ? 'First light' : 'Span ' + S.turn}</span></div>`;
 }
 const stances = c => CAST.map(id => ({ id, d: stance(id, c) })).filter(x => Math.abs(x.d) >= 4).sort((a, b) => b.d - a.d);
+/* A choice's logic line says what decides a gamble and what each outcome does. Written as a function, it reads the
+   live state, so a threshold shows where the colony stands now. */
+const byState = v => typeof v === 'function' ? v(S) : v;
+const atLeast = (what, have, min) => `${what} is ${min} or more (now ${Math.floor(have)})`;   /* floor, not round: 49.6 must not read as a pass */
 function choiceMeta(c, ok) {
   const st = stances(c), up = st.filter(x => x.d > 0), dn = st.filter(x => x.d < 0);
   let m = ok !== true ? `<span class="fx risk">${ico('warn')}${esc(ok)}</span>` : '';
@@ -5150,7 +5157,7 @@ function askHTML() {
   h += `<div class="prose">${ev.text(S).map(p => `<p>${fmt(p)}</p>`).join('')}</div><ol class="choices">`;
   list.forEach((c, i) => {
     const ok = canChoose(c);
-    h += `<li><button class="choice" data-act="choose" data-i="${i}" ${ok === true ? '' : 'disabled'}><span class="c-key" aria-hidden="true">${i + 1}</span><span><span class="c-label">${fmt(c.label)}</span>${c.note ? `<span class="c-note">${fmt(c.note)}</span>` : ''}${choiceMeta(c, ok)}</span></button></li>`;
+    h += `<li><button class="choice" data-act="choose" data-i="${i}" ${ok === true ? '' : 'disabled'}><span class="c-key" aria-hidden="true">${i + 1}</span><span><span class="c-label">${fmt(c.label)}</span>${c.note ? `<span class="c-note">${fmt(byState(c.note))}</span>` : ''}${c.logic ? `<span class="c-logic">${ico('branch')}<span>${fmt(byState(c.logic))}</span></span>` : ''}${choiceMeta(c, ok)}</span></button></li>`;
   });
   h += `</ol>`;
   if (list.some(c => stances(c).length)) h += `<label class="opt"><input type="checkbox" id="opt-reason" ${UI.reason ? 'checked' : ''}> Show the council’s reasoning</label>`;
