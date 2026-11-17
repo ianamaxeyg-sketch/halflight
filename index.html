@@ -283,6 +283,27 @@ h1, h2, h3, h4, p { margin: 0; }
 .xfer p { margin: 4px 0 0; max-width: 60ch; }
 .xfer textarea { display: block; width: 100%; max-width: 36rem; min-height: 4.8em; margin-top: 8px; padding: .5rem .6rem; border: 1px solid var(--line); border-radius: 4px; background: var(--bg); color: var(--fg); font: .78rem/1.35 ui-monospace, Consolas, monospace; word-break: break-all; resize: vertical; }
 .xfer .actions { margin-top: 10px; }
+.inh > p { margin: 0; max-width: 62ch; font-size: .92rem; color: var(--fg-dim); }
+details.inh-t { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--line-soft); font-size: .86rem; color: var(--fg-dim); }
+details.inh-t summary { cursor: pointer; width: fit-content; max-width: 100%; }
+details.inh-t summary .eyebrow { margin-right: .5rem; }
+details.inh-t > p { margin: 8px 0 0; max-width: 60ch; }
+.inh-bank { display: flex; flex-wrap: wrap; gap: 6px 8px; align-items: center; margin-top: 12px; }
+.inh-bank .eyebrow { margin-right: 2px; }
+.inh-msg { margin: 8px 0 0; font-size: .84rem; color: var(--fg); outline: none; }
+.perks { list-style: none; padding: 0; margin: 10px 0 0; max-width: 42rem; }
+.perk { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 3px 14px; align-items: center; padding: 10px 0; border-top: 1px solid var(--line-soft); }
+.pk-t { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; font-size: .92rem; color: var(--fg); }
+.pk-d { grid-column: 1; margin: 0; font-size: .84rem; line-height: 1.4; color: var(--fg-dim); }
+.pk-d .pk-now { display: block; color: var(--fg-faint); }
+.pk-buy { grid-column: 2; grid-row: 1 / span 2; display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 6px; }
+.pips { display: inline-flex; gap: 3px; }
+.pips i { width: 7px; height: 7px; border-radius: 50%; border: 1px solid var(--fg-dim); }
+.pips i.on { background: var(--fg); border-color: var(--fg); }
+@media (max-width: 519px) {
+  .perk { grid-template-columns: minmax(0, 1fr); }
+  .pk-buy { grid-column: 1; grid-row: auto; justify-content: flex-start; margin-top: 4px; }
+}
 .end-grid .got { color: var(--fg); border-color: var(--fg-dim); }
 .ending h3, .sec { font: 700 condensed 1rem/1.1 var(--f-display); letter-spacing: .12em; text-transform: uppercase; color: var(--fg-dim); margin: 24px 0 10px; }
 .tally { display: grid; grid-template-columns: repeat(auto-fit, minmax(6.6rem, 1fr)); gap: 10px 14px; }
@@ -1021,8 +1042,10 @@ function decideEnding() {
 function finish() {
   if (S.phase === 'ended') return;
   S.phase = 'ended'; S.cur = null; S.queue = [];
+  S.left = bequest(S);
   const m = loadMeta();
   m.endings[S.ending] = true; m.runs = (m.runs || 0) + 1;
+  if (m.paid !== S.seed) { for (const k of BANK) m.earned[k] += S.left[k]; m.paid = S.seed; } /* banked once, even if the tab closed before the term's last save */
   saveMeta(m);
 }
 
@@ -1051,17 +1074,83 @@ function validSave(j) {
     if (!Object.keys(SITES).every(id => j.sites[id] && opt(j.sites[id].integ) && opt(j.sites[id].lvl) && opt(j.sites[id].stage)) || !SITES[j.sel]) return false;
     if (!j.goals.every(g => GOALS[g.id] && ['open', 'kept', 'broken'].includes(g.state))) return false;
     if (!j.mods.every(m => opt(m.until) && opt(m.mul) && opt(m.add)) || !j.history.every(p => ['t', 'food', 'energy', 'morale', 'pop'].every(k => num(p[k])))) return false;
-    if (!j.journal.every(e => num(e.t)) || !Object.keys(j.axes).every(k => num(j.axes[k]))) return false;
+    if (!j.journal.every(e => num(e.t)) || !Object.keys(j.axes).every(k => num(j.axes[k])) || !nums(j.left)) return false;
     return true;
   } catch (e) { return false; }
 }
 function loadSave() { try { const j = JSON.parse(localStorage.getItem(SAVE_KEY)); if (validSave(j)) return j; } catch (e) { /* ignore */ } return null; }
 function clearSave() { try { localStorage.removeItem(SAVE_KEY); } catch (e) { /* ignore */ } }
-function loadMeta() { let m = null; try { m = JSON.parse(localStorage.getItem(META_KEY)); } catch (e) { /* ignore */ } return Object.assign({ endings: {}, runs: 0 }, m || {}); }
+function loadMeta() {
+  let m = null;
+  try { m = JSON.parse(localStorage.getItem(META_KEY)); } catch (e) { /* ignore */ }
+  m = Object.assign({ endings: {}, runs: 0 }, m && typeof m === 'object' ? m : {});
+  if (!m.endings || typeof m.endings !== 'object') m.endings = {};
+  m.earned = cleanBank(m.earned); m.perks = cleanPerks(m.perks); /* drawn on screen, so only numbers and known ids get through */
+  return m;
+}
 function saveMeta(m) { try { localStorage.setItem(META_KEY, JSON.stringify(m)); } catch (e) { /* ignore */ } }
 
-function begin(name, seed) {
+/* ---------- the inheritance: what a finished term leaves the terms after it ----------
+   Food, parts and power left in store when a term ends are banked across terms (a term cut short banks a share) and
+   spent on advantages every later term starts with. Meta keeps everything ever banked (earned) and the ranks bought
+   (perks); what is left to spend is derived from the two, so merging save codes by maximum cannot mint stock. */
+const BANK = ['food', 'parts', 'energy'], CAP0 = 100;
+const inhMod = (s, k, label, mul, add) => {
+  s.mods = s.mods.filter(m => m.id !== 'inh_' + k);
+  s.mods.push({ id: 'inh_' + k, label: 'Inherited: ' + label, k, mul: mul == null ? null : mul, add: add == null ? null : add, until: null });
+};
+/* say(n): the effect at rank n, for the shop. got(n): the same as a phrase, for the day-one journal entry.
+   Rank n costs n times the base cost. Deeper banks sits before charged cells so the extra charge fits under the cap. */
+const PERKS = [
+  { id: 'seed', res: 'food', name: 'Seed stock', max: 3, cost: { food: 30 }, say: n => `Every term starts with ${12 * n} more food.`, got: n => `${12 * n} more food`, apply: (s, n) => { s.food += 12 * n; } },
+  { id: 'strains', res: 'food', name: 'Hardier strains', max: 3, cost: { food: 50 }, say: n => `The Racks grow ${5 * n}% more food, all term.`, got: n => `Racks that grow ${5 * n}% more`, apply: (s, n) => inhMod(s, 'racks', `hardier strains, the Racks +${5 * n}%`, 1 + 0.05 * n) },
+  { id: 'kit', res: 'parts', name: 'Spare kit', max: 3, cost: { parts: 20 }, say: n => `Every term starts with ${6 * n} more parts.`, got: n => `${6 * n} more parts`, apply: (s, n) => { s.parts += 6 * n; } },
+  { id: 'works', res: 'parts', name: 'Sound works', max: 3, cost: { parts: 25 }, say: n => `Every site starts ${4 * n}% sounder: the Racks, the Hearth, the Mirror Field, the Ice Works and the vault seals.`, got: n => `every site ${4 * n}% sounder`, apply: (s, n) => { for (const id in s.sites) if (s.sites[id].integ != null) s.sites[id].integ = clamp(s.sites[id].integ + 4 * n, 5, 100); } },
+  { id: 'notes', res: 'parts', name: 'Machinists’ notes', max: 1, cost: { parts: 90 }, say: () => 'The colony makes 1 more part every span, 4 instead of 3.', got: () => '1 more part a span', apply: (s, n) => inhMod(s, 'parts', 'machinists’ notes, 1 more part a span', null, n) },
+  { id: 'banks', res: 'energy', name: 'Deeper banks', max: 2, cost: { energy: 25 }, say: n => `The reserve holds ${CAP0 + 10 * n} from the start, not ${CAP0}.`, got: n => `a reserve that holds ${CAP0 + 10 * n}`, apply: (s, n) => { s.cap += 10 * n; } },
+  { id: 'cells', res: 'energy', name: 'Charged cells', max: 3, cost: { energy: 15 }, say: n => `Every term starts with ${10 * n} more power banked.`, got: n => `${10 * n} more power banked`, apply: (s, n) => { s.energy = Math.min(s.cap, s.energy + 10 * n); } },
+  /* Kept small: the Dimming turns on a few points of power, and +12% here alone cut a careless bot's Cold Iron rate from 50% to 12%. */
+  { id: 'tuned', res: 'energy', name: 'Tuned Hearth', max: 2, cost: { energy: 40 }, say: n => `The Hearth makes ${3 * n}% more power, all term.`, got: n => `a Hearth that makes ${3 * n}% more`, apply: (s, n) => inhMod(s, 'hearth', `tuned Hearth, +${3 * n}% power`, 1 + 0.03 * n) },
+  { id: 'name', res: 'mixed', name: 'A good name', max: 2, cost: { food: 15, parts: 10, energy: 10 }, say: n => `Every councillor starts ${3 * n} trust warmer toward you.`, got: n => `a council ${3 * n} trust warmer`, apply: (s, n) => { for (const id in s.chars) s.chars[id].trust = clamp(s.chars[id].trust + 3 * n, 0, 100); } }
+];
+const cleanBank = b => Object.fromEntries(BANK.map(k => [k, b && typeof b[k] === 'number' && isFinite(b[k]) ? Math.max(0, Math.floor(b[k])) : 0]));
+function cleanPerks(p) {
+  const o = {};
+  if (p && typeof p === 'object') for (const d of PERKS) { const r = p[d.id]; if (typeof r === 'number' && r >= 1) o[d.id] = Math.min(d.max, Math.floor(r)); }
+  return o;
+}
+const perkCost = (p, n) => Object.fromEntries(Object.entries(p.cost).map(([k, v]) => [k, v * n]));
+/* What is left to spend. It dips below zero only when two codes that each spent the same stock are merged. */
+function bankOf(m) {
+  const o = Object.assign({}, m.earned);
+  for (const p of PERKS) for (let n = 1; n <= (m.perks[p.id] || 0); n++) { const c = perkCost(p, n); for (const k in c) o[k] -= c[k]; }
+  return o;
+}
+function buyPerk(id) {
+  const p = PERKS.find(x => x.id === id), m = loadMeta();
+  if (!p || (m.perks[id] || 0) >= p.max) return false;
+  const c = perkCost(p, (m.perks[id] || 0) + 1), b = bankOf(m);
+  if (!Object.keys(c).every(k => b[k] >= c[k])) return false;
+  m.perks[id] = (m.perks[id] || 0) + 1;
+  saveMeta(m);
+  return true;
+}
+/* A full term (one that reaches first light) passes on everything in store; a term cut short, a twentieth a span. */
+function bequest(s) {
+  const pct = s.turn > LAST_SPAN ? 100 : Math.round(clamp(s.turn, 0, LAST_SPAN) / LAST_SPAN * 100), o = { pct };
+  for (const k of BANK) o[k] = Math.max(0, Math.floor(s[k] * pct / 100));
+  return o;
+}
+function inherit(s, perks) {
+  const got = [];
+  for (const p of PERKS) { const n = Math.min(p.max, Math.floor(+perks[p.id] || 0)); if (n > 0) { p.apply(s, n); got.push(p.got(n)); } }
+  return got;
+}
+
+function begin(name, seed, perks) {
   S = newState(name, seed == null ? (Date.now() ^ (Math.random() * 0x7fffffff)) | 0 : seed);
+  const s0 = snap(), got = inherit(S, perks || loadMeta().perks);
+  if (got.length) log('story', 'What earlier terms left you', `The governors before you left this term ${got.length > 1 ? got.slice(0, -1).join(', ') + ' and ' + got[got.length - 1] : got[0]}.`, { d: diff(s0) });
   S.queue = ['i_wake', 'i_brief', 'i_keel', 'i_address'].map(id => ({ id }));
   nextUp();
   return S;
@@ -4674,7 +4763,7 @@ function guideHTML() {
   const show = (id, what) => `<button class="btn small" data-act="point" data-id="${id}" aria-label="Show me ${what}">Show me</button>`;
   const cost = t => `<span class="fx">${t}</span>`;
   const sec = (id, title, body) => `<details data-k="g-${id}"${UI.open['g-' + id] ? ' open' : ''}><summary>${title}</summary><div class="g-body">${body}</div></details>`;
-  const found = Object.keys(loadMeta().endings).length;
+  const meta = loadMeta(), found = Object.keys(meta.endings).length, inh = hasInheritance(meta);
 
   const start = `<ol>
     <li><b>Read the span report.</b> It lists what changed since the last span. A plus is good news, a minus is bad, a cross is a loss. “Follows from span 3” means the line is the result of something you decided then. Press Continue.</li>
@@ -4737,10 +4826,10 @@ function guideHTML() {
 
   const gauges = `<ul>
     <li><b>Food.</b> Stores, the change each span, and how many spans the stores last at that rate. It reads Low under 6 spans and Critical under 3. With empty stores, people die of hunger every span.</li>
-    <li><b>Energy.</b> The banked reserve and the change each span. The reserve holds 100 until you build storage cells. At zero, sections go dark: people die of cold, sleepers are lost and the Racks are damaged.</li>
+    <li><b>Energy.</b> The banked reserve and the change each span. The reserve holds ${CAP0} until you build storage cells, or more with an inherited advantage. At zero, sections go dark: people die of cold, sleepers are lost and the Racks are damaged.</li>
     <li><b>Morale.</b> 0 to 100. Each span it drifts toward a level set by rations, shifts, how far the council trusts you and what you have built or promised. At 10 or below for two spans running, the colony removes you.</li>
     <li><b>People.</b> Colonists awake, with the sleepers still in the vaults. Every ten awake eat 1 food a span on the full ration.</li>
-    <li><b>Parts.</b> What repairs and building cost. You gain 3 a span, and more from salvage.</li>
+    <li><b>Parts.</b> What repairs and building cost. You gain 3 a span (4 with machinists’ notes), and more from salvage.</li>
     <li><b>Crews free.</b> Work orders left this span.</li>
     <li><b>On the Plate.</b> Everyone who has died, starting with the 38 lost in the landing.</li>
   </ul>`;
@@ -4788,7 +4877,7 @@ function guideHTML() {
   </ul>`;
 
   const advice = `<ol>
-    <li><b>Close the food gap first.</b> On the full ration the colony eats about 9 more than it grows. A new tier of racks in span 1 costs 22 of your 26 parts and nearly closes it. The other way is lean rations.</li>
+    <li><b>Close the food gap first.</b> On the full ration the colony eats about 9 more than it grows. A new tier of racks in span 1 costs 22 parts and nearly closes it. The other way is lean rations.</li>
     <li><b>Send salvage crews early.</b> Almost everything costs parts, and the field holds about 200.</li>
     <li><b>Repair before a ring turns red.</b> Keep the Ice Works above 50% and the vault seals above 40%.</li>
     <li><b>Start banking power by span 10.</b> The Dimming is an energy problem before it is anything else.</li>
@@ -4801,21 +4890,34 @@ function guideHTML() {
     <li><b>Open the floor at the Keel</b> when morale drops under 40.</li>
   </ol>`;
 
+  const inherit = `<p>Every term after your first starts a little stronger, if you leave it something.</p>
+  <ul>
+    <li><b>What passes on.</b> When a term ends, the food, parts and power left in store pass to the governors woken after you. A term that reaches first light passes on all of it. A term cut short passes on a share: a twentieth for each span it lasted, so half after span 10. A term abandoned with Restart passes on nothing.</li>
+    <li><b>Spending it.</b> On the ending screen, or under “The inheritance” on the title screen. Each advantage is bought with the stock it builds on. Rank 2 costs twice what rank 1 did, and rank 3 three times. Whatever you do not spend is kept for later.</li>
+    <li><b>When they apply.</b> They are permanent. Every term you begin afterwards starts with them, and a term already under way keeps what it began with. Day one of the journal lists what a term inherited. Lasting effects, like hardier strains in the Racks, are listed under Threads, in effect.</li>
+    <li>Holding stock back at the end of a term is a choice like any other: what you bank for the next governor, this colony does not get.</li>
+  </ul>
+  <p class="eyebrow">The advantages, at rank 1</p>
+  <ul class="g-orders">${PERKS.map(p => `<li><b>${p.name}</b> ${cost(stockText(p.cost))} ${p.say(1)} ${p.max > 1 ? `Up to ${p.max} ranks.` : 'One rank.'}</li>`).join('')}</ul>`;
+
   const live = S && S.phase !== 'ended';
   const reset = `<ul>
-    <li><b>Saving.</b> The game saves itself on this device after every action. Close it and come back, and the title screen offers Continue. Each browser and device keeps its own save; to carry a term from one to another, use Save code on the title screen.</li>
-    <li><b>Restart.</b> The Restart button at the top right abandons the current term and returns to the title screen. It asks first. Endings you have found are kept. ${show('restart', 'the Restart button')}</li>
+    <li><b>Saving.</b> The game saves itself on this device after every action. Close it and come back, and the title screen offers Continue. Each browser and device keeps its own save; to carry a term, your endings and your inheritance from one to another, use Save code on the title screen.</li>
+    <li><b>Restart.</b> The Restart button at the top right abandons the current term and returns to the title screen. It asks first. Endings you have found and the inheritance are kept. ${show('restart', 'the Restart button')}</li>
     <li><b>After an ending,</b> “Wake another Governor” starts a new term.</li>
     <li><b>Endings.</b> There are ${ENDING_ORDER.length}. Six come from what the colony built or chose, four from how you governed, and four from how a term can fail.</li>
     <li>Saves live in this browser on this device. Clearing site data erases them.</li>
   </ul>` +
-    (live || found ? `<div class="g-act">` +
+    (live || found || inh ? `<div class="g-act">` +
       (live ? (UI.confirmNew
         ? `<span>Abandon this term?</span><button class="btn small" data-act="newyes" data-id="g-newyes">Yes, start over</button><button class="btn small" data-act="newno" data-id="g-newno">Keep playing</button>`
         : `<button class="btn small" data-act="newterm" data-id="g-newterm">Restart this term</button>`) : '') +
       (found ? (UI.confirmWipe
         ? `<span>Forget ${plural(found, 'found ending')}?</span><button class="btn small" data-act="wipeyes" data-id="wipeyes">Yes, clear the record</button><button class="btn small" data-act="wipeno" data-id="wipeno">Keep it</button>`
-        : `<button class="btn small" data-act="wipe" data-id="wipe">Clear the endings record</button>`) : '') + `</div>` : '');
+        : `<button class="btn small" data-act="wipe" data-id="wipe">Clear the endings record</button>`) : '') +
+      (inh ? (UI.confirmInh
+        ? `<span>Give up every advantage and all banked stock, for good?</span><button class="btn small" data-act="inhyes" data-id="inhyes">Yes, give it up</button><button class="btn small" data-act="inhno" data-id="inhno">Keep it</button>`
+        : `<button class="btn small" data-act="inhwipe" data-id="inhwipe">Give up the inheritance</button>`) : '') + `</div>` : '');
 
   const keys = `<ul>
     <li><kbd>1</kbd> to <kbd>9</kbd> choose an option.</li>
@@ -4835,6 +4937,7 @@ function guideHTML() {
     sec('threads', 'Threads, journal and charts', threads) +
     sec('dimming', 'The Dimming', dimming) +
     sec('advice', 'Advice for a first term', advice) +
+    sec('inherit', 'Between terms: the inheritance', inherit) +
     sec('reset', 'Restarting and saving', reset) +
     sec('keys', 'Keys and touch', keys) + `</div>`;
 }
@@ -4863,7 +4966,7 @@ const TERM = [672, 666, 659, 653, 646, 640, 634, 627, 621, 592, 563, 534, 506, 4
 const DEFAULT_NAMES = ['Marlowe', 'Okafor', 'Lindqvist', 'Sato', 'Rahimi', 'Castellan', 'Achebe', 'Novak', 'Tran', 'Halloran'];
 const REDUCED = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
 const TABS = [['council', 'Council'], ['threads', 'Threads'], ['colony', 'Colony'], ['record', 'Record'], ['guide', 'Guide']];
-const UI = { tab: 'guide', reason: false, theme: 'auto', duskKey: null, confirmNew: false, confirmBegin: false, confirmWipe: false, jspan: null, flash: null, shown: {}, open: { 'g-start': true }, name: 'Marlowe', xfer: null, xferMsg: '', xferCode: '', xferDraft: '' };
+const UI = { tab: 'guide', reason: false, theme: 'auto', duskKey: null, confirmNew: false, confirmBegin: false, confirmWipe: false, confirmInh: false, jspan: null, flash: null, shown: {}, open: { 'g-start': true }, name: 'Marlowe', xfer: null, xferMsg: '', xferCode: '', xferDraft: '', perkMsg: '' };
 let PREVIEW = null;
 const V = () => S || PREVIEW;
 const evWho = ev => typeof ev.who === 'function' ? ev.who(S) : ev.who;
@@ -5244,17 +5347,55 @@ function useCode(o) {
   const m = loadMeta(), got = (o.m && typeof o.m.endings === 'object' && o.m.endings) || {}, runs = o.m && o.m.runs;
   for (const id in got) if (ENDINGS[id] && got[id]) m.endings[id] = true;
   if (typeof runs === 'number' && isFinite(runs)) m.runs = Math.max(m.runs || 0, Math.floor(runs));
+  /* The larger of each figure wins, so loading the same code twice, or an older one, never adds stock. */
+  const e2 = cleanBank(o.m && o.m.earned), p2 = cleanPerks(o.m && o.m.perks);
+  for (const k of BANK) m.earned[k] = Math.max(m.earned[k], e2[k]);
+  for (const id in p2) m.perks[id] = Math.max(m.perks[id] || 0, p2[id]);
   saveMeta(m);
-  if (!o.s) return 'Loaded the endings from that code.';
+  if (!o.s) return 'Loaded the endings and the inheritance from that code.';
   try { localStorage.setItem(SAVE_KEY, JSON.stringify(o.s)); } catch (e) { return 'This browser would not store the term.'; }
   return `Loaded Governor ${o.s.name}’s term.`;
 }
 function xferHTML() {
   const msg = UI.xferMsg ? `<span class="hint" role="status">${esc(UI.xferMsg)}</span>` : '';
   if (UI.xfer === 'out') return `<div class="xfer"><label class="eyebrow" for="xfer-code">Your save code</label><textarea id="xfer-code" readonly spellcheck="false">${esc(UI.xferCode)}</textarea><div class="actions"><button class="btn small" data-act="xferclose">Done</button>${msg}</div></div>`;
-  if (UI.xfer === 'in') return `<div class="xfer"><label class="eyebrow" for="xfer-code">Paste a save code</label><p>It replaces any term saved here. Endings found on either side are kept.</p><textarea id="xfer-code" spellcheck="false" autocomplete="off" autocapitalize="off">${esc(UI.xferDraft)}</textarea><div class="actions"><button class="btn small primary" data-act="xferload">Load it</button><button class="btn small" data-act="xferclose">Cancel</button>${msg}</div></div>`;
-  const any = loadSave() || Object.keys(loadMeta().endings).length;
-  return `<div class="xfer"><span class="eyebrow">Save code</span><p>Your term saves itself on this device. To carry it to another browser or device, copy a save code here and load it there.</p><div class="actions"><button class="btn small" data-act="xferout"${any ? '' : ' disabled'}>Copy save code</button><button class="btn small" data-act="xferin">Load a save code</button>${msg}</div></div>`;
+  if (UI.xfer === 'in') return `<div class="xfer"><label class="eyebrow" for="xfer-code">Paste a save code</label><p>It replaces any term saved here. Endings and advantages from either side are kept, and banked stock takes the larger figure.</p><textarea id="xfer-code" spellcheck="false" autocomplete="off" autocapitalize="off">${esc(UI.xferDraft)}</textarea><div class="actions"><button class="btn small primary" data-act="xferload">Load it</button><button class="btn small" data-act="xferclose">Cancel</button>${msg}</div></div>`;
+  const m = loadMeta(), any = loadSave() || Object.keys(m.endings).length || hasInheritance(m);
+  return `<div class="xfer"><span class="eyebrow">Save code</span><p>Your term saves itself on this device. To carry it to another browser or device, with your endings and inheritance, copy a save code here and load it there.</p><div class="actions"><button class="btn small" data-act="xferout"${any ? '' : ' disabled'}>Copy save code</button><button class="btn small" data-act="xferin">Load a save code</button>${msg}</div></div>`;
+}
+/* ---------- the inheritance: spent on the ending screen, or on the title screen between terms ---------- */
+const hasInheritance = m => Object.keys(m.perks).length > 0 || BANK.some(k => m.earned[k] > 0);
+const listAnd = a => a.length > 1 ? a.slice(0, -1).join(', ') + ' and ' + a[a.length - 1] : a.join('');
+const stockText = o => listAnd(BANK.filter(k => o[k]).map(k => o[k] + ' ' + RNAME[k]));
+function freshPreview() { PREVIEW = newState('', 1); inherit(PREVIEW, loadMeta().perks); } /* the title screen's gauges show what the next term starts with */
+function shopHTML() {
+  const m = loadMeta(), b = bankOf(m);
+  let h = `<div class="inh-bank"><span class="eyebrow">To spend</span>${BANK.map(k => `<span class="fx">${ico(RICON[k])}${Math.max(0, b[k])} ${RNAME[k]}</span>`).join('')}</div>`;
+  if (UI.perkMsg) h += `<p class="inh-msg" id="perk-msg" role="status" tabindex="-1">${esc(UI.perkMsg)}</p>`;
+  return h + `<ul class="perks">` + PERKS.map(p => {
+    const n = m.perks[p.id] || 0, full = n >= p.max, c = full ? null : perkCost(p, n + 1), ok = !full && BANK.every(k => !c[k] || b[k] >= c[k]);
+    const pips = p.max > 1 ? `<span class="pips" role="img" aria-label="Rank ${n} of ${p.max}">${'<i class="on"></i>'.repeat(n)}${'<i></i>'.repeat(p.max - n)}</span>` : '';
+    const buy = full ? `<span class="pill kept"><span class="dot"></span>${p.max > 1 ? 'Every rank bought' : 'Bought'}</span>`
+      : BANK.filter(k => c[k]).map(k => `<span class="fx">${ico(RICON[k])}${c[k]} ${RNAME[k]}</span>`).join('') +
+        `<button class="btn small" data-act="perk" data-id="${p.id}" aria-label="Buy ${esc(p.name)}${p.max > 1 ? ', rank ' + (n + 1) : ''}, for ${esc(stockText(c))}"${ok ? '' : ' disabled'}>Buy</button>`;
+    /* Unbought or part-bought, the line says what the next rank gives; "Now" says what a term starts with today. */
+    return `<li class="perk"><div class="pk-t"><b>${esc(p.name)}</b>${pips}</div><p class="pk-d">${esc(p.say(full ? n : n + 1))}${n && !full ? `<span class="pk-now">Now: ${esc(p.got(n))}.</span>` : ''}</p><div class="pk-buy">${buy}</div></li>`;
+  }).join('') + `</ul>`;
+}
+function leaveHTML() {
+  const L = S.left;
+  const lead = !L ? 'What earlier terms left in store can be spent here.'
+    : L.pct >= 100 ? `Your term ends with ${stockText(L) || 'nothing'} in store. All of it passes to the governors woken after you.`
+    : `Your term lasted ${Math.min(S.turn, LAST_SPAN)} of ${LAST_SPAN} spans, so ${L.pct}% of what was in store passes on${stockText(L) ? ': ' + stockText(L) : ', which comes to nothing'}.`;
+  return `<h3>What you leave behind</h3><div class="inh"><p>${esc(lead)} Spend it on advantages that every later term starts with. Whatever you do not spend is kept.</p>${shopHTML()}</div>`;
+}
+function inheritTitleHTML() {
+  const m = loadMeta();
+  if (!hasInheritance(m)) return '';
+  const n = Object.keys(m.perks).length, b = bankOf(m), left = {};
+  for (const k of BANK) left[k] = Math.max(0, b[k]);
+  return `<details class="inh-t" data-k="inh"${UI.open.inh ? ' open' : ''}><summary><span class="eyebrow">The inheritance</span>${n ? plural(n, 'advantage') : 'No advantages yet'} · ${stockText(left) || 'nothing'} to spend</summary>` +
+    `<p>What earlier terms left in store, and the advantages bought with it. Every term you begin from now on starts with them.</p>${shopHTML()}</details>`;
 }
 function titleHTML() {
   const sv = loadSave();
@@ -5269,7 +5410,7 @@ function titleHTML() {
         ? `<span class="hint">Abandon Governor ${esc(sv.name)}’s term?</span><button class="btn" data-act="begin" data-id="beginyes">Yes, start a new term</button><button class="btn primary" data-act="beginno" id="btn-main">Keep it</button>`
         : `<button class="btn primary" data-act="resume" id="btn-main">Continue as Governor ${esc(sv.name)}, ${sv.turn > 0 ? 'span ' + Math.min(sv.turn, LAST_SPAN) : 'day one'}</button><button class="btn" data-act="begin" data-id="begin">Start a new term</button>`)
       : `<button class="btn primary" data-act="begin" id="btn-main">Wake the Governor</button>`) +
-    `<button class="btn" data-act="guide" data-id="guide-title">How to play</button></div>` + foundHTML() + xferHTML() + `</article>`;
+    `<button class="btn" data-act="guide" data-id="guide-title">How to play</button></div>` + foundHTML() + inheritTitleHTML() + xferHTML() + `</article>`;
 }
 function axesHTML(s) {
   const rows = [['rule', 'Decree', 'Consent'], ['horizon', 'Return', 'Roots'], ['creed', 'Arithmetic', 'Mercy'], ['candor', 'Sealed', 'Candid']];
@@ -5285,7 +5426,7 @@ function endingHTML() {
     `<h2>${esc(E.title)}</h2><p class="lede">${esc(E.kicker)}</p><div class="prose" style="margin-top:14px">${E.text(S).map(p => `<p>${fmt(p)}</p>`).join('')}<p>${fmt(legacy(S))}</p></div>` +
     `<h3>The count</h3><div class="tally">${cell(S.pop, 'awake')}${cell(S.sleepers, 'asleep')}${S.hollowsPop ? cell(S.hollowsPop, 'at the Hollows') : ''}${cell(S.dead, 'names on the Plate')}${cell(cut, 'cut in your term')}${cell(S.counts.decisions, 'decisions')}${cell(S.counts.orders, 'work orders')}</div>` +
     `<h3>The council</h3><ul class="epi">${CAST.map(id => `<li>${sigil(id)}<span><b>${esc(CHARS[id].name)}</b> ${fmt(epilogue(id, S))}</span></li>`).join('')}</ul>` +
-    `<h3>How you governed</h3>${axesHTML(S)}` +
+    `<h3>How you governed</h3>${axesHTML(S)}` + leaveHTML() +
     `<div class="actions"><button class="btn primary" data-act="again" id="btn-main">Wake another Governor</button><button class="btn" data-act="tab" data-id="record">Read the journal</button></div>` + foundHTML() + `</article>`;
 }
 function renderStory() {
@@ -5425,6 +5566,7 @@ function storyTop() {
 }
 function act(a, d) {
   let top = false;
+  if (a !== 'perk') UI.perkMsg = '';
   switch (a) {
     case 'begin': {
       UI.name = cleanName(($('#gov-name') || {}).value) || UI.name; top = true;
@@ -5450,7 +5592,15 @@ function act(a, d) {
     case 'theme': UI.theme = effTheme() === 'light' ? 'dark' : 'light'; saveUI(); break;
     case 'wipe': UI.confirmWipe = true; break;
     case 'wipeno': UI.confirmWipe = false; break;
-    case 'wipeyes': UI.confirmWipe = false; saveMeta({ endings: {}, runs: 0 }); break;
+    case 'wipeyes': { UI.confirmWipe = false; const m = loadMeta(); m.endings = {}; m.runs = 0; saveMeta(m); break; } /* the inheritance has its own reset */
+    case 'perk': {
+      const p = PERKS.find(x => x.id === d.id);
+      if (p && buyPerk(p.id)) { const n = loadMeta().perks[p.id]; UI.perkMsg = `Bought ${p.name}${p.max > 1 ? ', rank ' + n : ''}. ${p.say(n)}`; freshPreview(); }
+      break;
+    }
+    case 'inhwipe': UI.confirmInh = true; break;
+    case 'inhno': UI.confirmInh = false; break;
+    case 'inhyes': { UI.confirmInh = false; const m = loadMeta(); m.earned = cleanBank(null); m.perks = {}; saveMeta(m); freshPreview(); break; }
     case 'xferout': {
       UI.xfer = 'out'; UI.xferCode = saveCode(); UI.xferMsg = 'Select all of it and copy it.';
       if (navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(UI.xferCode).then(() => { if (UI.xfer === 'out') { UI.xferMsg = 'Copied. On the other device, choose “Load a save code” and paste it.'; keepFocus(render); } }, () => {});
@@ -5460,10 +5610,10 @@ function act(a, d) {
     case 'xferload': {
       const v = ($('#xfer-code') || {}).value || '', o = readCode(v);
       if (!o) { UI.xferDraft = v; UI.xferMsg = 'That code could not be read. Check that all of it was copied.'; break; }
-      UI.xfer = null; UI.xferDraft = ''; UI.confirmBegin = false; UI.xferMsg = useCode(o); top = true; break;
+      UI.xfer = null; UI.xferDraft = ''; UI.confirmBegin = false; UI.xferMsg = useCode(o); freshPreview(); top = true; break;
     }
     case 'xferclose': UI.xfer = null; UI.xferMsg = ''; UI.xferDraft = ''; break;
-    case 'newyes': case 'again': UI.confirmNew = false; UI.confirmBegin = false; UI.jspan = null; UI.flash = null; S = null; clearSave(); UI.name = DEFAULT_NAMES[Math.floor(Math.random() * DEFAULT_NAMES.length)]; top = true; break;
+    case 'newyes': case 'again': UI.confirmNew = false; UI.confirmBegin = false; UI.jspan = null; UI.flash = null; S = null; clearSave(); freshPreview(); UI.name = DEFAULT_NAMES[Math.floor(Math.random() * DEFAULT_NAMES.length)]; top = true; break;
     default: return;
   }
   keepFocus(render);
@@ -5474,6 +5624,7 @@ function act(a, d) {
   else if (a === 'tab' && narrow && d.scroll !== '0') $('#tabs').scrollIntoView({ block: 'nearest' });
   else if (a === 'guide') { const el = d.sec ? $(`details[data-k="g-${d.sec}"]`) : $('#tabs'); if (el) el.scrollIntoView({ block: d.sec ? 'start' : 'nearest' }); }
   else if (a === 'point') spot(d.id);
+  else if (a === 'perk') { const b = $(`[data-act="perk"][data-id="${d.id}"]`), msg = $('#perk-msg'); if ((!b || b.disabled) && msg) msg.focus({ preventScroll: true }); } /* a maxed or now unaffordable button cannot hold focus */
   else if ((a === 'xferout' || a === 'xferin' || a === 'xferload') && UI.xfer) { const t = $('#xfer-code'); if (t) { t.focus({ preventScroll: true }); if (UI.xfer === 'out') t.select(); t.scrollIntoView({ block: 'nearest' }); } }
 }
 document.addEventListener('click', e => {
@@ -5531,7 +5682,7 @@ function start(data) {
   loadUI();
   try { PAL = readPal(); } catch (e) { PAL = null; /* no palette, no dusk: the plain themes still work */ }
   if (window.matchMedia) { const mq = window.matchMedia('(prefers-color-scheme: light)'), on = () => { UI.duskKey = null; applyDusk(); }; if (mq.addEventListener) mq.addEventListener('change', on); }
-  PREVIEW = newState('', 1);
+  freshPreview();
   UI.name = DEFAULT_NAMES[Math.floor(Math.random() * DEFAULT_NAMES.length)];
   buildMap(); buildHorizon();
   const d = data || (window.claude && window.claude.hot && window.claude.hot.data) || {};
@@ -5541,7 +5692,8 @@ function start(data) {
 }
 window.HALFLIGHT = {
   get S() { return S; }, set S(v) { S = v; }, EVENTS, CHARS, ORDERS, GOALS, ENDINGS, ENDING_ORDER, HANDLERS,
-  begin, choose, cont, endSpan, issue, setPolicy, econ, project, visibleChoices, canChoose, orderState, crews, decideEnding, render, stance
+  begin, choose, cont, endSpan, issue, setPolicy, econ, project, visibleChoices, canChoose, orderState, crews, decideEnding, render, stance,
+  PERKS, buyPerk, bankOf, bequest, inherit, loadMeta, saveMeta
 };
 try { if (window.claude && window.claude.hot && window.claude.hot.snapshot) window.claude.hot.snapshot(() => ({ S })); } catch (e) { /* not in a viewer */ }
 if (window.claude && window.claude.hot && window.claude.hot.ready) window.claude.hot.ready(start); else start((window.claude && window.claude.hot && window.claude.hot.data) || {});
