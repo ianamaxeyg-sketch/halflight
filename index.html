@@ -85,6 +85,7 @@ body {
 button, input { font: inherit; color: inherit; }
 h1, h2, h3, h4, p { margin: 0; }
 :focus-visible { outline: 2px solid var(--lee); outline-offset: 2px; }
+#story h2[tabindex]:focus { outline: none; } /* the title takes focus by script so screen readers start there; it is not a control */
 .ico { width: 1.05em; height: 1.05em; flex: none; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; vertical-align: -0.16em; }
 .eyebrow { font: 700 condensed .86rem/1.1 var(--f-display); letter-spacing: .12em; text-transform: uppercase; color: var(--fg-dim); }
 .num { font-variant-numeric: tabular-nums; }
@@ -728,6 +729,9 @@ function trust(id, d, note) {
 }
 function infl(id, d) { const c = S.chars[id]; if (c) c.infl = clamp(c.infl + d, 0, 100); }
 function avgTrust(s = S) { let a = 0, n = 0; for (const id in s.chars) { a += s.chars[id].trust; n++; } return a / n; }
+/* Councillors who have left the table: Hadley once he lives at the Hollows, Patience once muted, Bao once arrested.
+   Their trust still moves, but they say nothing in council and its favors and grudges no longer come from them. */
+const away = (id, s = S) => id === 'hadley' ? !!s.flags.two_fires : id === 'patience' ? s.flags.patience === 'muted' : id === 'bao' && s.flags.bao === 'arrested';
 const tier = t => t >= 70 ? 'loyal' : t >= 52 ? 'supportive' : t >= 36 ? 'wary' : t >= 22 ? 'opposed' : 'hostile';
 const quip = (id, up) => pick(CHARS[id][up ? 'up' : 'down']);
 function npc(slot, role) {
@@ -767,7 +771,8 @@ function choose(i) {
   const out = typeof ch.out === 'function' ? ch.out(S) : ch.out;
   const reacts = Object.keys(S.chars).map(id => ({ id, d: S.chars[id].trust - tb[id] }))
     .filter(r => Math.abs(r.d) >= 3).sort((a, b) => Math.abs(b.d) - Math.abs(a.d));
-  for (const r of reacts.slice(0, 2)) r.say = (ch.say && ch.say[r.id]) || quip(r.id, r.d > 0);
+  /* The two biggest movers still at the table speak. Anyone away shows only as a figure. */
+  for (const r of reacts.filter(x => (ch.say && ch.say[x.id]) || !away(x.id)).slice(0, 2)) r.say = (ch.say && ch.say[r.id]) || quip(r.id, r.d > 0);
   const d = diff(before);
   S.journal[ji].d = d;
   S.counts.decisions++;
@@ -948,6 +953,7 @@ function councilMoves() {
   let n = 0;
   for (const id of shuffled(Object.keys(S.chars))) {
     const c = S.chars[id], def = CHARS[id];
+    if (away(id)) continue;
     if (c.cd > 0) { c.cd--; continue; }
     if (n >= 2) continue;
     if (c.trust >= 68 && chance(0.5)) { const t = def.boon(S); if (t) { line('good', t, id); c.cd = 4; n++; } }
@@ -1072,7 +1078,7 @@ function validSave(j) {
     if (!j.queue.every(q => EVENTS[q.id]) || !j.pending.every(p => num(p.due) && (!p.ev || EVENTS[p.ev]) && (!p.h || HANDLERS[p.h]))) return false;
     if (!Object.keys(CHARS).every(id => j.chars[id] && num(j.chars[id].trust) && num(j.chars[id].infl) && Array.isArray(j.chars[id].mem))) return false;
     if (!Object.keys(SITES).every(id => j.sites[id] && opt(j.sites[id].integ) && opt(j.sites[id].lvl) && opt(j.sites[id].stage)) || !SITES[j.sel]) return false;
-    if (!j.goals.every(g => GOALS[g.id] && ['open', 'kept', 'broken'].includes(g.state))) return false;
+    if (!j.goals.every(g => GOALS[g.id] && ['open', 'kept', 'broken', 'lapsed'].includes(g.state))) return false;
     if (!j.mods.every(m => opt(m.until) && opt(m.mul) && opt(m.add)) || !j.history.every(p => ['t', 'food', 'energy', 'morale', 'pop'].every(k => num(p[k])))) return false;
     if (!j.journal.every(e => num(e.t)) || !Object.keys(j.axes).every(k => num(j.axes[k])) || !nums(j.left)) return false;
     return true;
@@ -1444,7 +1450,7 @@ Object.assign(GOALS, {
   m2_vote: { who: 'moreau', round: 2, by: 16, text: 'Seat an assembly, or put the vote in writing, by span 16.', check: s => (s.flags.assembly || s.flags.election === 'called' || s.flags.pledged) ? 'kept' : null,
     memo: ['gave the Commons its vote', 'kept the vote from the Commons'],
     kept: { line: 'The vote is real. Moreau says the Commons will follow you into the dark for that.' }, broken: { line: 'No assembly and nothing in writing. Moreau will carry that into the dark with her.' } },
-  b2_parts: { who: 'bao', round: 2, by: 16, text: 'Hold 40 parts in reserve at the end of span 16.', check: byEnd(16, s => s.parts >= 40),
+  b2_parts: { who: 'bao', round: 2, by: 16, when: s => s.flags.bao !== 'arrested', text: 'Hold 40 parts in reserve at the end of span 16.', check: byEnd(16, s => s.parts >= 40),
     memo: ['kept a reserve of parts', 'spent the parts reserve to nothing'],
     kept: { line: 'Forty parts on the shelf. Bao approves of anyone who keeps something back.' }, broken: { line: 'The parts shelf is thin. Bao asked for 40 in hand before the dark.' } },
   h2_hollows: { who: 'hadley', round: 2, by: 14, when: s => s.sites.hollows.known && s.flags.hollows !== 'declined', text: 'Fit out the Hollows to stage 2 by span 14, before the colony chooses how to meet the dark.', check: s => s.sites.hollows.stage >= 2 ? 'kept' : null,
@@ -1821,6 +1827,7 @@ Object.assign(EVENTS, {
 
   hadley_went: {
     kind: 'council', title: 'Past the Line', site: 'ice', who: 'hadley',
+    gate: s => !s.sites.hollows.known, /* if the Hollows reached the map another way (Hadley's ridge walk), he never had to go alone */
     text: () => [
       `Hadley went anyway. He took no crew and signed for no supplies, and he was gone eleven days. He comes back with two fingers blackened to the second knuckle and a survey of the Hollows complete to the last gallery.`,
       `He puts it on your desk and stands there. He does not explain and he does not apologize. Kovač, behind you, has already said the word *desertion* twice.`
@@ -2014,7 +2021,7 @@ Object.assign(EVENTS, {
     choices: [
       {
         label: 'Arrest him. Seize the cache for the common store.', fx: { food: 14, parts: 10 }, tags: { decree: 1, watch: 2 }, infl: { bao: -25, kovac: 8 }, log: 'arrested Bao and seized his cache',
-        run: () => { flag('bao', 'arrested'); trust('bao', -14, 'had him arrested in front of his clerks'); later(2, { h: 'storesFreeze', label: 'The Tally House without Bao' }); },
+        run: () => { flag('bao', 'arrested'); for (const g of S.goals) if (g.state === 'open' && GOALS[g.id].who === 'bao') { g.state = 'lapsed'; g.t1 = S.turn; } trust('bao', -14, 'had him arrested in front of his clerks'); later(2, { h: 'storesFreeze', label: 'The Tally House without Bao' }); },
         out: `The Watch walks Bao out of the Tally House past his own clerks. He goes without fuss, and stops at the door to straighten a ledger on its shelf. The cache turns up under the wreck’s number-three cargo deck: fourteen crates of ration and a pallet of machined parts, every item tagged in his neat hand.`
       },
       {
@@ -4910,7 +4917,7 @@ function guideHTML() {
   </ul>` +
     (live || found || inh ? `<div class="g-act">` +
       (live ? (UI.confirmNew
-        ? `<span>Abandon this term?</span><button class="btn small" data-act="newyes" data-id="g-newyes">Yes, start over</button><button class="btn small" data-act="newno" data-id="g-newno">Keep playing</button>`
+        ? `<span>Abandon this term? Nothing in store passes on.</span><button class="btn small" data-act="newyes" data-id="g-newyes">Yes, start over</button><button class="btn small" data-act="newno" data-id="g-newno">Keep playing</button>`
         : `<button class="btn small" data-act="newterm" data-id="g-newterm">Restart this term</button>`) : '') +
       (found ? (UI.confirmWipe
         ? `<span>Forget ${plural(found, 'found ending')}?</span><button class="btn small" data-act="wipeyes" data-id="wipeyes">Yes, clear the record</button><button class="btn small" data-act="wipeno" data-id="wipeno">Keep it</button>`
@@ -5075,7 +5082,7 @@ function renderTop() {
   const cr = on && t >= 1 ? crews() : 1, used = on ? s.orders : 0;
   let a = `<div class="substats"><span>${ico('parts')}Parts <b>${Math.round(s.parts)}</b></span><span>${ico('crew')}Crews free <b>${Math.max(0, cr - used)}</b> of ${cr}</span><span>${ico('plate')}On the Plate <b>${s.dead}</b></span></div>`;
   a += on && UI.confirmNew
-    ? `<div class="substats"><span>Abandon this term?</span><span><button class="btn small" data-act="newyes" data-id="newyes">Yes, start over</button> <button class="btn small" data-act="newno" data-id="newno">Keep playing</button></span></div>`
+    ? `<div class="substats"><span>Abandon this term? Nothing in store passes on.</span><span><button class="btn small" data-act="newyes" data-id="newyes">Yes, start over</button> <button class="btn small" data-act="newno" data-id="newno">Keep playing</button></span></div>`
     : `<span class="top-btns"><button class="btn small" data-act="guide" data-id="guide">Guide</button>${on ? `<button class="btn small" data-act="newterm" data-id="newterm">Restart</button>` : ''}</span>`;
   $('#aside').innerHTML = a;
   document.querySelectorAll('.big[data-n]').forEach(el => {
@@ -5255,7 +5262,7 @@ function askHTML() {
   const ev = EVENTS[S.cur.id], list = visibleChoices(ev), o = S.cur.o, who = curWho();
   let h = `<article class="ev">` + evHead(ev);
   if (o && o.title) h += `<p class="origin">${ico('branch')}<span>Because of ${when(o.t)}: <b>${esc(o.title)}</b></span></p>`;
-  h += `<h2>${esc(curTitle(ev))}</h2>`;
+  h += `<h2 tabindex="-1">${esc(curTitle(ev))}</h2>`;
   if (who) h += `<div class="speaker">${sigil(who)}<div><div class="who">${esc(CHARS[who].name)}</div><div class="role">${esc(CHARS[who].role)}</div></div></div>`;
   h += `<div class="prose">${ev.text(S).map(p => `<p>${fmt(p)}</p>`).join('')}</div><ol class="choices">`;
   list.forEach((c, i) => {
@@ -5407,7 +5414,7 @@ function titleHTML() {
     `<div class="field"><label class="eyebrow" for="gov-name">Governor’s name</label><input id="gov-name" type="text" maxlength="24" autocomplete="off" spellcheck="false" value="${esc(UI.name)}"></div>` +
     `<div class="actions">` + (sv && sv.phase !== 'ended'
       ? (UI.confirmBegin
-        ? `<span class="hint">Abandon Governor ${esc(sv.name)}’s term?</span><button class="btn" data-act="begin" data-id="beginyes">Yes, start a new term</button><button class="btn primary" data-act="beginno" id="btn-main">Keep it</button>`
+        ? `<span class="hint">Abandon Governor ${esc(sv.name)}’s term? Nothing in store passes on.</span><button class="btn" data-act="begin" data-id="beginyes">Yes, start a new term</button><button class="btn primary" data-act="beginno" id="btn-main">Keep it</button>`
         : `<button class="btn primary" data-act="resume" id="btn-main">Continue as Governor ${esc(sv.name)}, ${sv.turn > 0 ? 'span ' + Math.min(sv.turn, LAST_SPAN) : 'day one'}</button><button class="btn" data-act="begin" data-id="begin">Start a new term</button>`)
       : `<button class="btn primary" data-act="begin" id="btn-main">Wake the Governor</button>`) +
     `<button class="btn" data-act="guide" data-id="guide-title">How to play</button></div>` + foundHTML() + inheritTitleHTML() + xferHTML() + `</article>`;
@@ -5443,7 +5450,7 @@ function councilHTML() {
     return `<article class="cc${UI.flash === id ? ' flash' : ''}" id="cc-${id}"><div class="cc-top">${sigil(id)}<div><h4>${esc(d.name)}</h4><div class="role">${esc(d.role)}</div></div><span class="pill ${t}"><span class="dot"></span>${TIER[t]}</span></div>` +
       `<div class="bars"><span>Trust</span><div class="meter" style="--m:var(${t === 'hostile' ? '--crit' : t === 'opposed' ? '--warn' : '--fg'})"><i style="--w:${c.trust}%"></i></div><b>${c.trust}</b><span>Sway</span><div class="meter"><i style="--w:${c.infl}%"></i></div><b>${c.infl}</b></div>` +
       `<p class="wants"><b>Wants</b>${esc(d.wants)}</p>` +
-      (g ? `<div class="ask"><b>Asks</b><span class="t">${esc(GOALS[g.id].text)}</span><span class="pill ${g.state}"><span class="dot"></span>${g.state === 'open' ? 'Open' : g.state === 'kept' ? 'Kept' : 'Broken'}</span></div>` : '') +
+      (g ? `<div class="ask"><b>Asks</b><span class="t">${esc(GOALS[g.id].text)}</span><span class="pill ${g.state}"><span class="dot"></span>${g.state === 'open' ? 'Open' : g.state === 'kept' ? 'Kept' : g.state === 'lapsed' ? 'Lapsed' : 'Broken'}</span></div>` : '') +
       (mem.length ? `<ul class="mem" aria-label="What ${esc(d.short)} remembers">` + mem.map(m => `<li><span class="arr ${m.d > 0 ? 'up' : 'down'}">${m.d > 0 ? '▲' : '▼'}</span><span>${m.t === 0 ? 'Day one' : 'Span ' + m.t}: you ${esc(m.note)}.</span></li>`).join('') + `</ul>` : '') +
       `<details data-k="file-${id}"${UI.open['file-' + id] ? ' open' : ''}><summary>File</summary><p>${esc(d.bio)}</p></details></article>`;
   }).join('') + `</div>`;
@@ -5458,7 +5465,7 @@ function threadsHTML() {
   let h = `<p class="sec" style="margin-top:0">Promises and asks</p>`;
   h += goals.length ? goals.map(g => {
     const d = GOALS[g.id];
-    return `<div class="thread"><span class="t">${d.promise ? '' : sigil(d.who, true) + ' '}${esc(d.text)}</span><span class="eta"><span class="pill ${g.state}"><span class="dot"></span>${g.state === 'open' ? 'By span ' + d.by : g.state === 'kept' ? 'Kept' : 'Broken'}</span></span></div>`;
+    return `<div class="thread"><span class="t">${d.promise ? '' : sigil(d.who, true) + ' '}${esc(d.text)}</span><span class="eta"><span class="pill ${g.state}"><span class="dot"></span>${g.state === 'open' ? 'By span ' + d.by : g.state === 'kept' ? 'Kept' : g.state === 'lapsed' ? 'Lapsed' : 'Broken'}</span></span></div>`;
   }).join('') : `<p class="empty">None yet.</p>`;
   const pend = S.pending.slice().sort((a, b) => a.due - b.due);
   h += `<p class="sec">In motion</p>`;
@@ -5561,7 +5568,7 @@ function storyTop() {
   const el = $('#story');
   el.scrollTop = 0;
   if (el.getBoundingClientRect().top < 0) el.scrollIntoView({ block: 'start' });
-  const b = $('#btn-main');
+  const b = $('#btn-main') || $('#story h2[tabindex]'); /* a decision has no main button: land on its title, so Tab reaches the choices next */
   if (b) b.focus({ preventScroll: true });
 }
 function act(a, d) {
