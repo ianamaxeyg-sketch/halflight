@@ -113,6 +113,9 @@ h1, h2, h3, h4, p { margin: 0; }
 .top-b { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 10px 30px; align-items: center; padding-top: 10px; border-top: 1px solid var(--line-soft); }
 .brand { display: flex; align-items: center; gap: 9px; min-width: 0; }
 .brand svg { width: 26px; height: 26px; flex: none; }
+/* The logo is the theme switch. As a real button an iPhone tap counts as a click (WebKit ignores taps on a bare SVG)
+   and the keyboard and VoiceOver reach it. The padding widens the target; the matching negative margin moves nothing. */
+.brand-mark { appearance: none; -webkit-appearance: none; flex: none; display: grid; padding: 8px; margin: -8px; border: 0; border-radius: 6px; background: none; color: inherit; cursor: pointer; }
 .bm-sun { fill: var(--glare); } .bm-line { stroke: var(--fg); stroke-width: 2; fill: none; stroke-linecap: round; } .bm-ref { stroke: var(--fg-faint); stroke-width: 1.6; fill: none; stroke-linecap: round; }
 .brand h1 { font: 800 condensed 1.3rem/1 var(--f-display); letter-spacing: .05em; text-transform: uppercase; }
 .clock { font-size: .82rem; color: var(--fg-dim); }
@@ -191,7 +194,8 @@ h1, h2, h3, h4, p { margin: 0; }
 .site.hot .site-pulse { animation: pulse 1.9s ease-out infinite; }
 @keyframes pulse { 0% { opacity: .95; transform: scale(.75); } 100% { opacity: 0; transform: scale(1.75); } }
 .site-flag { fill: var(--crit); stroke: var(--surface); stroke-width: 2; }
-.tok { cursor: pointer; }
+.tok { cursor: pointer; outline: none; }
+.tok:focus-visible circle { stroke: var(--fg); stroke-width: 2.5; }
 .tok circle { fill: var(--c); stroke: var(--surface); stroke-width: 2; }
 .tok text { font: 700 condensed 9.5px var(--f-display); font-size: calc(9.5px * var(--g, 1)); fill: var(--oc, #fff); text-anchor: middle; letter-spacing: .03em; pointer-events: none; }
 
@@ -372,6 +376,9 @@ details.inh-t > p { margin: 8px 0 0; max-width: 60ch; }
 .strip button { appearance: none; background: var(--raised); border: 1px solid var(--line-soft); border-radius: 3px; padding: 3px 2px 4px; min-height: 2.9rem; cursor: pointer; display: grid; gap: 2px; align-content: start; justify-items: center; }
 .strip button:disabled { cursor: default; opacity: .55; }
 .strip button.now { border-color: var(--fg); } .strip button.dimz { background: color-mix(in srgb, var(--fg-faint) 16%, var(--raised)); }
+/* iOS 15.0–16.1 has no color-mix(). Because the two rules that use it hold var(), the browser cannot fall back to an
+   earlier value on its own and paints them transparent, so give those versions a plain colour. */
+@supports not (color: color-mix(in srgb, red 50%, blue)) { .meter, .strip button.dimz { background: var(--line); } }
 .strip .sn { font: 700 condensed .8rem/1 var(--f-display); color: var(--fg-dim); }
 .strip .gl { display: flex; flex-wrap: wrap; gap: 2px; justify-content: center; } .strip .kg { width: 7px; height: 7px; }
 .legend { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 8px; font-size: .78rem; color: var(--fg-dim); }
@@ -498,7 +505,7 @@ kbd { font: 600 .78rem/1 var(--f-ui); padding: .12rem .4rem; border: 1px solid v
   <header class="top panel">
     <div class="top-a">
       <div class="brand">
-        <svg viewBox="0 0 34 34" aria-hidden="true" data-act="theme"><path class="bm-sun" d="M6 20a11 11 0 0 1 22 0z"/><path class="bm-line" d="M2 20h30"/><path class="bm-ref" d="M9 25h16M13 29.5h8"/></svg>
+        <button class="brand-mark" data-act="theme" aria-label="Switch between light and dark"><svg viewBox="0 0 34 34" aria-hidden="true"><path class="bm-sun" d="M6 20a11 11 0 0 1 22 0z"/><path class="bm-line" d="M2 20h30"/><path class="bm-ref" d="M9 25h16M13 29.5h8"/></svg></button>
         <h1>The Halflight Mandate</h1>
       </div>
       <div class="clock" id="clock">Hesper, the Selvage</div>
@@ -5173,7 +5180,7 @@ function updateMap() {
   let k = '';
   for (const sid in at) at[sid].forEach((id, i) => {
     const d = SITES[sid], o = OFF[i % 4];
-    k += `<g class="tok c-${id}${id === 'bao' ? ' dark' : ''}" data-act="char" data-id="${id}" transform="translate(${(d.x + o[0] * G).toFixed(1)} ${(d.y + o[1] * G).toFixed(1)})"><title>${esc(CHARS[id].name)}</title><circle r="${n1(9.5)}"/><text y="${n1(3.4)}">${CHARS[id].mono}</text></g>`;
+    k += `<g class="tok c-${id}${id === 'bao' ? ' dark' : ''}" data-act="char" data-id="${id}" tabindex="0" role="button" aria-label="${esc(CHARS[id].name)}" transform="translate(${(d.x + o[0] * G).toFixed(1)} ${(d.y + o[1] * G).toFixed(1)})"><title>${esc(CHARS[id].name)}</title><circle r="${n1(9.5)}"/><text y="${n1(3.4)}">${CHARS[id].mono}</text></g>`;
   });
   $('#toks').innerHTML = k;
   $('#night').style.transform = `translateX(${TERM[clamp(s.turn, 0, TERM.length - 1)] - 75}px)`;
@@ -5649,7 +5656,8 @@ document.addEventListener('keydown', e => {
     if (e.key === 'Enter') { const sv = loadSave(), edited = cleanName(t.value) !== UI.name; act(sv && sv.phase !== 'ended' && !edited && !UI.confirmBegin ? 'resume' : 'begin', {}); }
     return;
   }
-  if ((e.key === 'Enter' || e.key === ' ') && t.classList && t.classList.contains('site')) { e.preventDefault(); act('site', t.dataset); return; }
+  /* Map sites and councillor tokens are focusable SVG groups (WebKit only turns a tap into a click on focusable elements), so give them the keys a button has. */
+  if ((e.key === 'Enter' || e.key === ' ') && t.classList && (t.classList.contains('site') || t.classList.contains('tok'))) { e.preventDefault(); act(t.dataset.act, t.dataset); return; }
   if (t.tagName === 'INPUT' || t.tagName === 'SELECT' || t.tagName === 'TEXTAREA' || e.metaKey || e.ctrlKey || e.altKey) return;
   if (S && S.phase === 'event' && S.cur && S.cur.stage === 'ask' && /^[1-9]$/.test(e.key)) {
     const b = document.querySelector(`.choice[data-i="${+e.key - 1}"]`);
