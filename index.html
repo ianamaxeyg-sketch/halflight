@@ -558,6 +558,13 @@ function rnd() {
   return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
 }
 const rint = (a, b) => a + Math.floor(rnd() * (b - a + 1));
+/* A fixed draw from the seed and a key. It never touches S.rng, so reading it (in a label, say) changes nothing else. */
+function hash01(seed, k) {
+  let h = (Math.imul(seed | 0, 0x9E3779B1) + Math.imul(k + 1, 0x85EBCA77)) | 0;
+  h ^= h >>> 16; h = Math.imul(h, 0x85EBCA6B);
+  h ^= h >>> 13; h = Math.imul(h, 0xC2B2AE35);
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+}
 const pick = a => a[Math.floor(rnd() * a.length)];
 const chance = p => rnd() < p;
 const shuffled = a => { const b = a.slice(); for (let i = b.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [b[i], b[j]] = [b[j], b[i]]; } return b; };
@@ -1350,6 +1357,13 @@ const SITES = {
 const ROUTES = [['keel', 'racks'], ['keel', 'hearth'], ['keel', 'stores'], ['keel', 'infirm'], ['keel', 'mirror'], ['stores', 'wreck'], ['hearth', 'ridge'], ['keel', 'ice'], ['ice', 'hollows'], ['ice', 'flats']];
 
 /* ---------- work orders ---------- */
+/* Bao's price: the food that 10 parts fetch this span, 5 to 11. A fresh price is drawn from the seed every third span,
+   and the price walks from one to the next in between, so it rises and falls over a few spans instead of jumping. */
+const BARTER = [5, 11];
+function barter(s = S, t = s.turn) {
+  const k = Math.floor(t / 3), f = (t - 3 * k) / 3, at = i => BARTER[0] + Math.floor(hash01(s.seed, i) * (BARTER[1] - BARTER[0] + 1));
+  return Math.round(at(k) + (at(k + 1) - at(k)) * f);
+}
 const repair = (id, label, memo, who, text) => ({
   site: id, label, desc: 'Restores 30% integrity.', cost: { parts: 8 }, memo, trust: who ? { [who]: 2 } : null,
   can: s => s.sites[id].integ <= 92 || 'Already in good order',
@@ -1417,14 +1431,24 @@ Object.assign(ORDERS, {
     run: () => { flag('winterized'); return 'Every seam in the dormitory ring is foamed and lagged. The Keel will hold its heat.'; }
   },
   trade_food: {
-    site: 'stores', label: 'Trade parts for food', desc: 'Bao turns 10 parts into 8 food.', cost: { parts: 10 }, tags: { market: 1 },
-    can: s => s.flags.bao !== 'arrested' || 'Nobody at the Tally House will deal',
-    run: s => { gain('food', 8); s.counts.trade++; trust('bao', 2, 'traded through the Tally House'); return 'Bao weighed the parts, sucked his teeth, and produced eight units of food from somewhere.'; }
+    site: 'stores', label: 'Trade parts for food', cost: { parts: 10 }, tags: { market: 1 },
+    desc: s => {
+      if (away('bao', s)) return 'Bao paid ' + BARTER[0] + ' to ' + BARTER[1] + ' food for 10 parts, depending on the span.';
+      const n = barter(s), was = s.turn > 1 ? barter(s, s.turn - 1) : n;
+      return 'Bao turns 10 parts into ' + n + ' food this span' + (n > was ? ', up from ' + was : n < was ? ', down from ' + was : s.turn > 1 ? ', the same as last span' : '') +
+        '. The price moves between ' + BARTER[0] + ' and ' + BARTER[1] + '.';
+    },
+    can: s => !away('bao', s) || 'Without Bao, nobody has food to sell',
+    run: s => { const n = barter(s); gain('food', n); s.counts.trade++; trust('bao', 2, 'traded through the Tally House'); return 'Bao weighed the parts, sucked his teeth, and produced ' + numW(n) + ' units of food from somewhere.'; }
   },
   trade_parts: {
-    site: 'stores', label: 'Trade food for parts', desc: 'Bao turns 8 food into 9 parts.', cost: { food: 8 }, tags: { market: 1 },
-    can: s => s.flags.bao !== 'arrested' || 'Nobody at the Tally House will deal',
-    run: s => { gain('parts', 9); s.counts.trade++; trust('bao', 2, 'traded through the Tally House'); return 'Eight units of food went out the side door. Nine parts came in the front.'; }
+    site: 'stores', label: 'Trade food for parts', cost: { food: 8 }, tags: { market: 1 },
+    desc: s => away('bao', s) ? 'Bao is gone, but the clerks still buy hoarded scrap: 8 food for 9 parts.' : 'Bao turns 8 food into 9 parts.',
+    run: s => {
+      gain('parts', 9); s.counts.trade++;
+      if (away('bao', s)) return 'The clerks posted a ration price on the Tally House door. By the end of the shift, eight units of food had bought nine parts of hoarded scrap out of the dormitories.';
+      trust('bao', 2, 'traded through the Tally House'); return 'Eight units of food went out the side door. Nine parts came in the front.';
+    }
   },
   clinic: {
     site: 'infirm', label: 'Run screening rounds', desc: 'Catches sickness early for five spans, this one included.', cost: { parts: 4 }, memo: 'ran screening rounds',
@@ -2500,7 +2524,7 @@ Object.assign(HANDLERS, {
   storesFreeze: () => {
     mod({ id: 'nobao', label: 'The Tally House runs on fear and paperwork', k: 'parts', add: -2 });
     gain('morale', -3);
-    return { k: 'bad', text: 'Without Bao, the Tally House runs on fear and paperwork. Salvage tallies are slipping, and the quiet trades that kept people in boots have stopped.' };
+    return { k: 'bad', text: 'Without Bao, the Tally House runs on fear and paperwork. Salvage tallies are slipping, and the quiet trades that kept people in boots have stopped. The clerks will still buy hoarded scrap for rations.' };
   },
   curfewLapse: () => {
     if (S.flags.curfew !== 'reviewed') return null;
@@ -5595,7 +5619,7 @@ function guideHTML() {
   <p class="eyebrow">The Keel</p>
   <ul class="g-orders"><li><b>Open the floor of the Commons</b> ${cost('free')} Morale +3. Every other span.</li><li><b>Seal and lag the dormitories</b> ${cost('16 parts')} Cuts the heating load in the Dimming.</li></ul>
   <p class="eyebrow">Tally House and Infirmary</p>
-  <ul class="g-orders"><li><b>Trade</b> ${cost('10 parts')} for 8 food, or ${cost('8 food')} for 9 parts.</li><li><b>Run screening rounds</b> ${cost('4 parts')} Softens sickness for five spans.</li></ul>
+  <ul class="g-orders"><li><b>Trade</b> ${cost('10 parts')} for 5 to 11 food, at Bao’s price for the span, or ${cost('8 food')} for 9 parts. Food for parts stays open without Bao.</li><li><b>Run screening rounds</b> ${cost('4 parts')} Softens sickness for five spans.</li></ul>
   <p class="eyebrow">Great works</p>
   <ul class="g-orders"><li><b>The Spire, the Hollows, duskbloom beds</b> ${cost('24, 20 or 14 parts a stage')} Three stages each. They unlock through the story, at Signal Ridge and at two sites the colony has yet to find.</li></ul>
   <p class="eyebrow">Projects</p>
