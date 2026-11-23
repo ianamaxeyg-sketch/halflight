@@ -1,6 +1,6 @@
 # The Halflight Mandate
 
-A narrative simulation. Govern a stranded colony on the twilight band of a world with no morning: twenty spans, seven councillors, one long night.
+A narrative simulation. Govern a stranded colony on the twilight band of a world with no morning: forty spans, seven councillors, one long night.
 
 **Play: https://ianamaxeyg-sketch.github.io/halflight/**
 
