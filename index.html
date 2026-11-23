@@ -714,8 +714,10 @@ const flag = (k, v = true) => { S.flags[k] = v; };
 const site = id => S.sites[id];
 const fix = (id, n = 30) => { const st = S.sites[id]; st.integ = clamp(st.integ + n, 5, 100); };
 
+/* `at` (wall-clock seconds) lets a finished term's save code say how long it took to play, span by span. Nothing in the game reads it. */
+const clockNow = () => Math.round(Date.now() / 1000);
 function log(k, title, text, extra) {
-  S.journal.push(Object.assign({ t: S.turn, k, title, text }, extra || {}));
+  S.journal.push(Object.assign({ t: S.turn, k, title, text }, extra || {}, { at: clockNow() }));
   return S.journal.length - 1;
 }
 function line(k, text, who, jk) {
@@ -839,7 +841,7 @@ function nextUp() {
 /* ---------- the span ---------- */
 function startSpan() {
   if (S.turn === 0) {
-    S.history.push({ t: 0, food: S.food, energy: S.energy, morale: S.morale, pop: S.pop });
+    S.history.push({ t: 0, food: S.food, energy: S.energy, morale: S.morale, pop: S.pop, at: clockNow() });
     assignGoals(1);
   }
   S.turn++; S.orders = 0; S.lastOrder = null; S.pol0 = Object.assign({}, S.policy);
@@ -1021,7 +1023,7 @@ function endSpan() {
   simulate();
   checkGoals();
   councilMoves();
-  S.history.push({ t: S.turn, food: S.food, energy: S.energy, morale: S.morale, pop: S.pop });
+  S.history.push({ t: S.turn, food: S.food, energy: S.energy, morale: S.morale, pop: S.pop, at: clockNow() });
   checkCollapse();
   if (S.ending) finish(); else startSpan();
   save();
