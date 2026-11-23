@@ -685,8 +685,10 @@ function project() {
 }
 
 /* ---------- state changes ---------- */
+/* The 'steady' mod: morale, trust and sway can rise but never fall. No event grants it; only a save that carries it. */
+const steady = (s = S) => !!s && s.mods.some(m => m.id === 'steady');
 function gain(k, d) {
-  if (!d) return;
+  if (!d || (k === 'morale' && d < 0 && steady())) return;
   S[k] += d;
   if (k === 'morale') S.morale = clamp(Math.round(S.morale), 0, 100);
   else if (k === 'energy') S.energy = clamp(S.energy, 0, S.cap);
@@ -754,12 +756,12 @@ function whyOf(id, ch) {
   return ex >= 0 ? 'it serves what they are trying to protect' : 'it cuts against what they are trying to protect';
 }
 function trust(id, d, note) {
-  const c = S.chars[id]; if (!c || !d) return 0;
+  const c = S.chars[id]; if (!c || !d || (d < 0 && steady())) return 0;
   const b = c.trust; c.trust = clamp(Math.round(c.trust + d), 0, 100);
   if (note && Math.abs(d) >= 3) c.mem.push({ t: S.turn, d: Math.round(d), note });
   return c.trust - b;
 }
-function infl(id, d) { const c = S.chars[id]; if (c) c.infl = clamp(c.infl + d, 0, 100); }
+function infl(id, d) { const c = S.chars[id]; if (c && !(d < 0 && steady())) c.infl = clamp(c.infl + d, 0, 100); }
 function avgTrust(s = S) { let a = 0, n = 0; for (const id in s.chars) { a += s.chars[id].trust; n++; } return a / n; }
 /* Councillors who have left the table: Hadley once he lives at the Hollows, Patience once muted, Bao once arrested.
    Their trust still moves, but they say nothing in council and its favors and grudges no longer come from them. */
@@ -960,7 +962,8 @@ function simulate() {
   if (S.policy.ration === 'lean' && chance(0.15)) line('bad', 'Two rack techs fainted on shift this span. The infirmary is logging malnutrition.');
   if (S.turn >= sp(4) && S.seen.first_birth && S.food > 10 && chance(0.08)) { S.pop += 1; line('good', 'A child was born in the Keel this span.'); }
   const target = moraleTarget(S, e);
-  S.morale = clamp(Math.round(S.morale + (target - S.morale) * 0.3), 0, 100);
+  const toward = clamp(Math.round(S.morale + (target - S.morale) * 0.3), 0, 100);
+  S.morale = steady() ? Math.max(S.morale, toward) : toward;
 }
 
 function assignGoals(round) {
@@ -6215,6 +6218,12 @@ function shopHTML() {
     return `<li class="perk"><div class="pk-t"><b>${esc(p.name)}</b>${pips}</div><p class="pk-d">${esc(p.say(full ? n : n + 1))}${n && !full ? `<span class="pk-now">Now: ${esc(p.got(n))}.</span>` : ''}</p><div class="pk-buy">${buy}</div></li>`;
   }).join('') + `</ul>`;
 }
+const xferShut = () => { UI.xfer = null; UI.xferMsg = ''; UI.xferDraft = ''; };
+/* The finished term as a save code. Waking another governor clears the term, so the ending screen is the last place to copy it. */
+function endXferHTML() {
+  if (UI.xfer === 'out') return xferHTML();
+  return `<div class="xfer"><span class="eyebrow">Save code</span><p>Copy this finished term as a save code, with your endings and inheritance, to keep it or carry it to another device. Waking another governor clears the term.</p><div class="actions"><button class="btn small" data-act="xferout">Copy save code</button></div></div>`;
+}
 function leaveHTML() {
   /* S.left already includes the hardship bonus, so the store itself is read from S, and the bonus is named apart. */
   const L = S.left, h = hardOf(S), store = stockText(Object.fromEntries(BANK.map(k => [k, Math.max(0, Math.floor(S[k]))])));
@@ -6270,7 +6279,7 @@ function endingHTML() {
     `<h2>${esc(E.title)}</h2><p class="lede">${esc(E.kicker)}</p><div class="prose" style="margin-top:14px">${E.text(S).map(p => `<p>${fmt(p)}</p>`).join('')}<p>${fmt(legacy(S))}</p></div>` +
     `<h3>The count</h3><div class="tally">${cell(S.pop, 'awake')}${cell(S.sleepers, 'asleep')}${S.hollowsPop ? cell(S.hollowsPop, 'at the Hollows') : ''}${cell(S.dead, 'names on the Plate')}${cell(cut, 'cut in your term')}${cell(S.counts.decisions, 'decisions')}${cell(S.counts.orders, 'work orders')}</div>` +
     `<h3>The council</h3><ul class="epi">${CAST.map(id => `<li>${sigil(id)}<span><b>${esc(CHARS[id].name)}</b> ${fmt(epilogue(id, S))}</span></li>`).join('')}</ul>` +
-    `<h3>How you governed</h3>${axesHTML(S)}` + leaveHTML() +
+    `<h3>How you governed</h3>${axesHTML(S)}` + leaveHTML() + endXferHTML() +
     `<div class="actions"><button class="btn primary" data-act="again" id="btn-main">Wake another Governor</button><button class="btn" data-act="tab" data-id="record">Read the journal</button></div>` + foundHTML() + `</article>`;
 }
 function renderStory() {
@@ -6418,10 +6427,10 @@ function act(a, d) {
       UI.name = cleanName(($('#gov-name') || {}).value) || UI.name; top = true;
       const sv = loadSave();
       if (sv && sv.phase !== 'ended' && !UI.confirmBegin) { UI.confirmBegin = true; break; } /* a live term is only overwritten on a second, explicit yes */
-      UI.confirmBegin = false; begin(UI.name); break;
+      UI.confirmBegin = false; xferShut(); begin(UI.name); break;
     }
     case 'beginno': UI.confirmBegin = false; top = true; break;
-    case 'resume': { const sv = loadSave(); if (sv) { S = sv; setTerm(S); UI.confirmBegin = false; top = true; } break; }
+    case 'resume': { const sv = loadSave(); if (sv) { S = sv; setTerm(S); UI.confirmBegin = false; xferShut(); top = true; } break; }
     case 'choose': top = choose(+d.i); break;
     case 'cont': cont(); top = true; break;
     case 'end': top = endSpan(); break;
@@ -6459,8 +6468,8 @@ function act(a, d) {
       if (!o) { UI.xferDraft = v; UI.xferMsg = 'That code could not be read. Check that all of it was copied.'; break; }
       UI.xfer = null; UI.xferDraft = ''; UI.confirmBegin = false; UI.xferMsg = useCode(o); freshPreview(); top = true; break;
     }
-    case 'xferclose': UI.xfer = null; UI.xferMsg = ''; UI.xferDraft = ''; break;
-    case 'newyes': case 'again': UI.confirmNew = false; UI.confirmBegin = false; UI.jspan = null; UI.flash = null; S = null; setTerm(S); clearSave(); freshPreview(); UI.name = DEFAULT_NAMES[Math.floor(Math.random() * DEFAULT_NAMES.length)]; top = true; break;
+    case 'xferclose': xferShut(); break;
+    case 'newyes': case 'again': UI.confirmNew = false; UI.confirmBegin = false; UI.jspan = null; UI.flash = null; xferShut(); S = null; setTerm(S); clearSave(); freshPreview(); UI.name = DEFAULT_NAMES[Math.floor(Math.random() * DEFAULT_NAMES.length)]; top = true; break;
     default: return;
   }
   keepFocus(render);
