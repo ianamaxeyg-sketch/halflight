@@ -290,6 +290,9 @@ h1, h2, h3, h4, p { margin: 0; }
 .xfer p { margin: 4px 0 0; max-width: 60ch; }
 .xfer textarea { display: block; width: 100%; max-width: 36rem; min-height: 4.8em; margin-top: 8px; padding: .5rem .6rem; border: 1px solid var(--line); border-radius: 4px; background: var(--bg); color: var(--fg); font: .78rem/1.35 ui-monospace, Consolas, monospace; word-break: break-all; resize: vertical; }
 .xfer .actions { margin-top: 10px; }
+.xfer input.pcode { display: block; width: 100%; max-width: 21rem; margin-top: 8px; padding: .5rem .6rem; border: 1px solid var(--line); border-radius: 4px; background: var(--bg); color: var(--fg); font: 600 1.05rem/1.3 ui-monospace, Consolas, monospace; letter-spacing: .08em; text-transform: uppercase; }
+.xfer .textlink { min-height: 32px; padding: .3rem .2rem; border: 0; background: none; color: var(--fg-dim); font: inherit; font-size: .82rem; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
+.xfer .textlink:hover { color: var(--fg); }
 .inh > p { margin: 0; max-width: 62ch; font-size: .92rem; color: var(--fg-dim); }
 details.inh-t { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--line-soft); font-size: .86rem; color: var(--fg-dim); }
 details.inh-t summary { cursor: pointer; width: fit-content; max-width: 100%; }
@@ -1679,7 +1682,7 @@ Object.assign(EVENTS, {
       },
       {
         label: '“Show me the numbers.”', log: 'asked Patience for the numbers', trust: { patience: 2 },
-        out: `The wall panel fills: stores, power, the vault manifest, and a curve that bends down to meet zero at span eight. “You may wish to sit,” says Patience. You stay standing. It is a long time before you look away from the curve.`
+        out: () => `The wall panel fills: stores, power, the vault manifest, and a curve that bends down to meet zero at span ${numW(sp(8))}. “You may wish to sit,” says Patience. You stay standing. It is a long time before you look away from the curve.`
       }
     ]
   },
@@ -1776,7 +1779,7 @@ Object.assign(EVENTS, {
         label: 'Hold the full ration, and promise it will stand.', note: `A public promise through span ${sp(6)}. The stores keep falling until you grow more.`,
         tags: { mercy: 1, growers: 1 }, log: `promised the full ration would hold through span ${sp(6)}`,
         run: () => addGoal('promise_food'),
-        out: `“The ration holds,” you tell the Commons. “Through span six, on my word. By then we will be growing more.” Dr. Adeyemi finds you afterward with a parts list already written out. Kovač says only, “Then you had better build fast.”`
+        out: () => `“The ration holds,” you tell the Commons. “Through span ${numW(sp(6))}, on my word. By then we will be growing more.” Dr. Adeyemi finds you afterward with a parts list already written out. Kovač says only, “Then you had better build fast.”`
       },
       {
         label: 'Tiered rations: full plates for heavy labor and children.', note: 'Saves food. Divides the mess hall.',
@@ -2002,20 +2005,20 @@ Object.assign(EVENTS, {
     kind: 'discovery', title: 'The Echo', site: 'ridge', who: 'reyes',
     text: () => [
       `Reyes has not slept. He plays it for you in the Hearth control room, off a salvaged comm panel: a carrier tone, thin and regular, climbing out of the static every forty seconds like a breath.`,
-      `“That’s a fleet transponder. That’s the *Slow Mercy*, our trailing ship, twenty-six months behind us on the same lane. She doesn’t know we’re here. She passes through our sky between span twelve and span fifteen, and after that she’s gone.” His hands are shaking. He puts them flat on the console. “I can build something on Signal Ridge that will reach her. Three stages. Parts I don’t have. One chance.”`,
+      `“That’s a fleet transponder. That’s the *Slow Mercy*, our trailing ship, twenty-six months behind us on the same lane. She doesn’t know we’re here. She passes through our sky between span ${numW(sp(12))} and span ${numW(sp(16) - 1)}, and after that she’s gone.” His hands are shaking. He puts them flat on the console. “I can build something on Signal Ridge that will reach her. Three stages. Parts I don’t have. One chance.”`,
       `Patience confirms the tone and the window. It offers no opinion, which is itself an opinion.`
     ],
     choices: [
       {
         label: 'Commit to the Spire, and tell the colony why.', note: 'Unlocks the Spire at Signal Ridge. Hope is a resource too.',
         fx: { morale: 5 }, tags: { return: 2, wrights: 1, candor: 1 }, log: 'committed the colony to building the Spire',
-        run: s => { flag('spire', 'committed'); s.flags.hope = s.turn; later(16 - s.turn, { h: 'windowCloses', hidden: true, label: 'The hail window' }); },
+        run: s => { flag('spire', 'committed'); s.flags.hope = s.turn; later(sp(16) - s.turn, { h: 'windowCloses', hidden: true, label: 'The hail window' }); },
         out: `You play the tone over every speaker in the Keel. For forty seconds nobody moves. Then it comes round again, and a welder at the back starts to cry, and then to laugh, and then the whole Commons is on its feet. Hadley is not among them.`
       },
       {
         label: 'Authorize it quietly. No announcement until it works.', note: 'Unlocks the Spire without raising hopes.',
         tags: { return: 1, sealed: 1 }, trust: { reyes: 2 }, log: 'authorized the Spire quietly',
-        run: s => { flag('spire', 'quiet'); later(16 - s.turn, { h: 'windowCloses', hidden: true, label: 'The hail window' }); },
+        run: s => { flag('spire', 'quiet'); later(sp(16) - s.turn, { h: 'windowCloses', hidden: true, label: 'The hail window' }); },
         out: `“Quietly,” Reyes says. “Fine. I can be quiet.” He cannot. By the next shift bell half the Wrights are carrying lattice sections up Signal Ridge and telling anyone who asks that it is a weather mast.`
       },
       {
@@ -2027,7 +2030,7 @@ Object.assign(EVENTS, {
       {
         label: 'Put the Spire to the Commons, and build it if they say so.', note: 'Unlocks the Spire at Signal Ridge, with the Commons behind it.',
         fx: { morale: 3 }, tags: { return: 1, consent: 1 }, log: 'let the Commons vote to build the Spire',
-        run: s => { flag('spire', 'committed'); s.flags.hope = s.turn; later(16 - s.turn, { h: 'windowCloses', hidden: true, label: 'The hail window' }); },
+        run: s => { flag('spire', 'committed'); s.flags.hope = s.turn; later(sp(16) - s.turn, { h: 'windowCloses', hidden: true, label: 'The hail window' }); },
         out: `The Commons hears the tone, then Reyes, then Dr. Adeyemi on what a Spire will cost the Racks. They vote at second bell: build it, two hundred and six hands. Reyes counts them twice, as if they were parts.`
       }
     ]
@@ -2135,6 +2138,8 @@ Object.assign(HANDLERS, {
   },
   windowCloses: () => {
     if (S.seen.hail_window || S.flags.spire === 'refused' || S.sites.ridge.stage >= 3) return null;
+    /* Saves from before 2026-11-24 scheduled this for span 16 in every term length; the window closes at sp(16). */
+    if (S.turn < sp(16)) { later(sp(16) - S.turn, { h: 'windowCloses', hidden: true, label: 'The hail window' }); return null; }
     const c = S.flags.spire === 'committed';
     gain('morale', c ? -6 : -2);
     trust('reyes', -8, 'let the hail window close with the Spire unfinished');
@@ -3058,7 +3063,7 @@ Object.assign(EVENTS, {
     choices: [
       {
         label: 'Relent. He can build his Spire.', note: 'Unlocks the Spire at Signal Ridge.', tags: { return: 1, mercy: 1 }, trust: { reyes: 8 }, log: 'relented and let Reyes build the Spire',
-        run: s => { flag('spire', 'quiet'); later(Math.max(1, 16 - s.turn), { h: 'windowCloses', hidden: true, label: 'The hail window' }); },
+        run: s => { flag('spire', 'quiet'); later(Math.max(1, sp(16) - s.turn), { h: 'windowCloses', hidden: true, label: 'The hail window' }); },
         out: `“Thank you,” he says, and has to stop. He puts the photograph away. Within the shift there are lattice sections going up Signal Ridge, and the Hearth has never been so lovingly tended.`
       },
       {
@@ -3068,13 +3073,13 @@ Object.assign(EVENTS, {
       {
         label: '“Build it on your own time, with whatever Bao will give you.”', note: 'Unlocks the Spire at Signal Ridge, off the books.',
         tags: { return: 1, market: 1 }, trust: { reyes: 5 }, log: 'let Reyes build the Spire off the books',
-        run: s => { flag('spire', 'quiet'); later(Math.max(1, 16 - s.turn), { h: 'windowCloses', hidden: true, label: 'The hail window' }); },
+        run: s => { flag('spire', 'quiet'); later(Math.max(1, sp(16) - s.turn), { h: 'windowCloses', hidden: true, label: 'The hail window' }); },
         out: `“Off the books,” Reyes says. “I can do off the books.” By the end of the span there is a surveyor’s stake on Signal Ridge and a pile of scrap under a tarpaulin that Bao insists he has never seen. Reyes has started whistling, which nobody has heard him do before.`
       },
       {
         label: 'Put it to the Commons. If they want a door, they build it.', logic: s => `Works if ${atLeast('morale', s.morale, 40)}, or if your term has leaned toward leaving over putting down roots (${s.axes.horizon <= 0 ? 'it has' : 'it has not'}): the Commons votes for the Spire, and it unlocks at Signal Ridge. Otherwise there is no Spire.`,
         tags: { consent: 2 }, log: 'put Reyes’s Spire to the Commons',
-        run: s => { s.tmp.ok = s.morale >= 40 || s.axes.horizon <= 0; if (s.tmp.ok) { flag('spire', 'committed'); s.flags.hope = s.turn; later(Math.max(1, 16 - s.turn), { h: 'windowCloses', hidden: true, label: 'The hail window' }); } },
+        run: s => { s.tmp.ok = s.morale >= 40 || s.axes.horizon <= 0; if (s.tmp.ok) { flag('spire', 'committed'); s.flags.hope = s.turn; later(Math.max(1, sp(16) - s.turn), { h: 'windowCloses', hidden: true, label: 'The hail window' }); } },
         out: s => s.tmp.ok
           ? `Reyes makes the case himself, badly, with the photograph in his hand. It doesn’t matter. The Commons votes for the Spire by a margin that surprises everyone, Reyes most of all. He has to sit down on the steps of the Plate.`
           : `Reyes makes the case himself, with the photograph in his hand. The Commons listens kindly and votes no. They are tired, and they want to live here, and they say so. He thanks them. Then he goes back to the Hearth and does not come out for a span.`
@@ -5713,7 +5718,7 @@ function guideHTML() {
 
   const live = S && S.phase !== 'ended';
   const reset = `<ul>
-    <li><b>Saving.</b> The game saves itself on this device after every action. Close it and come back, and the title screen offers Continue. Each browser and device keeps its own save; to carry a term, your endings and your inheritance from one to another, use Save code on the title screen.</li>
+    <li><b>Saving.</b> The game saves itself on this device after every action. Close it and come back, and the title screen offers Continue. Each browser and device keeps its own save. To carry your endings, inheritance and hardship to another, copy the progress code on the title screen and enter it there; a term in progress stays on its device.</li>
     <li><b>Restart.</b> The Restart button at the top right abandons the current term and returns to the title screen. It asks first. Endings you have found and the inheritance are kept. ${show('restart', 'the Restart button')}</li>
     <li><b>After an ending,</b> “Wake another Governor” starts a new term.</li>
     <li><b>Endings.</b> There are ${ENDING_ORDER.length}. Six come from what the colony built or chose, four from how you governed, and four from how a term can fail.</li>
@@ -6161,7 +6166,11 @@ function foundHTML() {
   const m = loadMeta(), n = ENDING_ORDER.filter(id => m.endings[id]).length;
   return `<div class="found"><span class="eyebrow">Endings found: ${n} of ${ENDING_ORDER.length}</span><div class="end-grid">${ENDING_ORDER.map(id => m.endings[id] ? `<span class="got">${esc(ENDINGS[id].title)}</span>` : `<span aria-label="Not yet found">· · ·</span>`).join('')}</div></div>`;
 }
-/* ---------- save codes: carry a term and its endings to another browser or device ---------- */
+/* ---------- codes ----------
+   A progress code carries what lasts between terms (endings found, the inheritance's bank and ranks, the hardship opened)
+   in 20 Crockford base-32 characters: 80 bits of fields and a 20-bit check. A term is far too big for that, so it stays
+   on its device. The ending screen can still copy a finished term whole (HALFLIGHT1:, base64 JSON, tens of kilobytes),
+   for playtests and bug reports; it loads anywhere, as it always did. */
 const CODE_TAG = 'HALFLIGHT1:';
 function saveCode() {
   const b = new TextEncoder().encode(JSON.stringify({ s: loadSave(), m: loadMeta() }));
@@ -6179,6 +6188,44 @@ function readCode(text) {
     return o && typeof o === 'object' && (o.s == null || validSave(o.s)) ? o : null; /* validSave type-checks everything the renderer draws */
   } catch (e) { return null; }
 }
+const B32 = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
+/* Field widths in bits. Banked stock is kept up to 32767 a kind, far past the price of every rank (2625 food at most). */
+const PCODE = [['v', 2], ['end', 14], ['hard', 3], ['perks', 16], ['food', 15], ['parts', 15], ['energy', 15]], PCODE_SUM = 20;
+function pcodeSum(bits) {   /* FNV-1a over the field bits, folded to 20 bits */
+  let h = 2166136261;
+  for (let i = 0; i < bits.length; i += 8) { let b = 0; for (let j = 0; j < 8; j++) b = b * 2 + (bits[i + j] || 0); h = Math.imul(h ^ b, 16777619); }
+  return ((h >>> 0) ^ (h >>> 20)) & 0xFFFFF;
+}
+function progressCode(m) {
+  const v = { v: 1, end: 0, hard: m.hard, perks: 0 }, bits = [];
+  ENDING_ORDER.forEach((id, i) => { if (m.endings[id]) v.end += 2 ** i; });
+  for (let i = PERKS.length - 1; i >= 0; i--) v.perks = v.perks * (PERKS[i].max + 1) + (m.perks[PERKS[i].id] || 0);   /* mixed radix: 55,296 combinations */
+  for (const k of BANK) v[k] = Math.min(32767, m.earned[k]);
+  for (const [k, w] of PCODE) for (let i = w - 1; i >= 0; i--) bits.push(Math.floor(v[k] / 2 ** i) % 2);
+  const sum = pcodeSum(bits);
+  for (let i = PCODE_SUM - 1; i >= 0; i--) bits.push((sum >>> i) & 1);
+  let out = '';
+  for (let i = 0; i < bits.length; i += 5) out += B32[bits.slice(i, i + 5).reduce((a, b) => a * 2 + b, 0)];
+  return out;
+}
+/* Case, spaces and dashes don't matter, and I, L and O read as 1, 1 and 0. Returns { m } for useCode(), or null. */
+function readProgress(text) {
+  const t = String(text || '').toUpperCase().replace(/[\s-]+/g, '').replace(/[IL]/g, '1').replace(/O/g, '0');
+  if (t.length !== 20 || /[^0-9A-HJKMNP-TV-Z]/.test(t)) return null;
+  const bits = [], v = {};
+  for (const c of t) { const n = B32.indexOf(c); for (let i = 4; i >= 0; i--) bits.push((n >> i) & 1); }
+  let p = 0;
+  for (const [k, w] of PCODE) { let x = 0; for (let i = 0; i < w; i++) x = x * 2 + bits[p++]; v[k] = x; }
+  let sum = 0;
+  for (let i = 0; i < PCODE_SUM; i++) sum = sum * 2 + bits[p++];
+  if (v.v !== 1 || sum !== pcodeSum(bits.slice(0, bits.length - PCODE_SUM)) || v.hard > HARD.length || v.end >= 2 ** ENDING_ORDER.length) return null;
+  const endings = {}, perks = {};
+  ENDING_ORDER.forEach((id, i) => { if (Math.floor(v.end / 2 ** i) % 2) endings[id] = true; });
+  let q = v.perks;
+  for (const d of PERKS) { const r = q % (d.max + 1); q = Math.floor(q / (d.max + 1)); if (r) perks[d.id] = r; }
+  if (q) return null;
+  return { m: { endings, earned: { food: v.food, parts: v.parts, energy: v.energy }, perks, hard: v.hard, pv: 2 } };
+}
 function useCode(o) {
   const m = loadMeta(), got = (o.m && typeof o.m.endings === 'object' && o.m.endings) || {}, runs = o.m && o.m.runs;
   for (const id in got) if (ENDINGS[id] && got[id]) m.endings[id] = true;
@@ -6190,16 +6237,19 @@ function useCode(o) {
   for (const id in p2) m.perks[id] = Math.max(m.perks[id] || 0, p2[id]);
   m.hard = Math.max(m.hard, clamp(Math.floor(o.m && o.m.hard) || 0, 0, HARD.length));
   saveMeta(m);
-  if (!o.s) return 'Loaded the endings and the inheritance from that code.';
+  if (!o.s) return 'Added the endings, inheritance and hardship from that code.';
   try { localStorage.setItem(SAVE_KEY, JSON.stringify(o.s)); } catch (e) { return 'This browser would not store the term.'; }
   return `Loaded Governor ${o.s.name}’s term.`;
 }
 function xferHTML() {
   const msg = UI.xferMsg ? `<span class="hint" role="status">${esc(UI.xferMsg)}</span>` : '';
-  if (UI.xfer === 'out') return `<div class="xfer"><label class="eyebrow" for="xfer-code">Your save code</label><textarea id="xfer-code" readonly spellcheck="false">${esc(UI.xferCode)}</textarea><div class="actions"><button class="btn small" data-act="xferclose">Done</button>${msg}</div></div>`;
-  if (UI.xfer === 'in') return `<div class="xfer"><label class="eyebrow" for="xfer-code">Paste a save code</label><p>It replaces any term saved here. Endings and advantages from either side are kept, and banked stock takes the larger figure.</p><textarea id="xfer-code" spellcheck="false" autocomplete="off" autocapitalize="off">${esc(UI.xferDraft)}</textarea><div class="actions"><button class="btn small primary" data-act="xferload">Load it</button><button class="btn small" data-act="xferclose">Cancel</button>${msg}</div></div>`;
-  const m = loadMeta(), any = loadSave() || Object.keys(m.endings).length || hasInheritance(m);
-  return `<div class="xfer"><span class="eyebrow">Save code</span><p>Your term saves itself on this device. To carry it to another browser or device, with your endings and inheritance, copy a save code here and load it there.</p><div class="actions"><button class="btn small" data-act="xferout"${any ? '' : ' disabled'}>Copy save code</button><button class="btn small" data-act="xferin">Load a save code</button>${msg}</div></div>`;
+  if (UI.xfer === 'out') return `<div class="xfer"><label class="eyebrow" for="xfer-code">Your progress code</label><input id="xfer-code" class="pcode" readonly spellcheck="false" value="${esc(UI.xferCode)}"><div class="actions"><button class="btn small" data-act="xferclose">Done</button>${msg}</div></div>`;
+  if (UI.xfer === 'full') return `<div class="xfer"><label class="eyebrow" for="xfer-code">The full term</label><p>Every choice and every span of this term, for a bug report or a playtest. It also loads on another device.</p><textarea id="xfer-code" readonly spellcheck="false">${esc(UI.xferCode)}</textarea><div class="actions"><button class="btn small" data-act="xferclose">Done</button>${msg}</div></div>`;
+  if (UI.xfer === 'in') return `<div class="xfer"><label class="eyebrow" for="xfer-code">Enter a code</label><p>A progress code adds its endings, advantages and hardship to what is here, and banked stock takes the larger figure. An older long save code also replaces any term saved here.</p><input id="xfer-code" class="pcode" spellcheck="false" autocomplete="off" autocapitalize="characters" value="${esc(UI.xferDraft)}"><div class="actions"><button class="btn small primary" data-act="xferload">Load it</button><button class="btn small" data-act="xferclose">Cancel</button>${msg}</div></div>`;
+  const m = loadMeta(), any = Object.keys(m.endings).length || hasInheritance(m) || m.hard > 0, sv = loadSave();
+  /* A finished term stays on the device until the next one begins, so it can still be copied whole after a reload. */
+  const full = sv && sv.phase === 'ended' ? `<button class="textlink" data-act="xferfull">Copy Governor ${esc(sv.name)}’s finished term</button>` : '';
+  return `<div class="xfer"><span class="eyebrow">Progress code</span><p>Your term saves itself on this device. To carry your endings, inheritance and hardship to another browser or device, copy your progress code here and enter it there. A term in progress stays where it is.</p><div class="actions"><button class="btn small" data-act="xferout"${any ? '' : ' disabled'}>Copy progress code</button><button class="btn small" data-act="xferin">Enter a code</button>${full}${msg}</div></div>`;
 }
 /* ---------- the inheritance: spent on the ending screen, or on the title screen between terms ---------- */
 const hasInheritance = m => Object.keys(m.perks).length > 0 || BANK.some(k => m.earned[k] > 0);
@@ -6221,10 +6271,10 @@ function shopHTML() {
   }).join('') + `</ul>`;
 }
 const xferShut = () => { UI.xfer = null; UI.xferMsg = ''; UI.xferDraft = ''; };
-/* The finished term as a save code. Waking another governor clears the term, so the ending screen is the last place to copy it. */
+/* The progress code, and the finished term whole. Waking another governor clears the term, so this is the last place to copy it. */
 function endXferHTML() {
-  if (UI.xfer === 'out') return xferHTML();
-  return `<div class="xfer"><span class="eyebrow">Save code</span><p>Copy this finished term as a save code, with your endings and inheritance, to keep it or carry it to another device. Waking another governor clears the term.</p><div class="actions"><button class="btn small" data-act="xferout">Copy save code</button></div></div>`;
+  if (UI.xfer === 'out' || UI.xfer === 'full') return xferHTML();
+  return `<div class="xfer"><span class="eyebrow">Progress code</span><p>Your endings, inheritance and hardship in twenty characters, to carry to another browser or device.</p><div class="actions"><button class="btn small" data-act="xferout">Copy progress code</button><button class="textlink" data-act="xferfull">Copy the full term</button></div></div>`;
 }
 function leaveHTML() {
   /* S.left already includes the hardship bonus, so the store itself is read from S, and the bonus is named apart. */
@@ -6459,15 +6509,18 @@ function act(a, d) {
     case 'inhwipe': UI.confirmInh = true; break;
     case 'inhno': UI.confirmInh = false; break;
     case 'inhyes': { UI.confirmInh = false; const m = loadMeta(); m.earned = cleanBank(null); m.perks = {}; saveMeta(m); freshPreview(); break; }
-    case 'xferout': {
-      UI.xfer = 'out'; UI.xferCode = saveCode(); UI.xferMsg = 'Select all of it and copy it.';
-      if (navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(UI.xferCode).then(() => { if (UI.xfer === 'out') { UI.xferMsg = 'Copied. On the other device, choose “Load a save code” and paste it.'; keepFocus(render); } }, () => {});
+    case 'xferout': case 'xferfull': {
+      const k = a === 'xferfull' ? 'full' : 'out';
+      if (k === 'full' && (loadSave() || {}).phase !== 'ended') break;   /* only a finished term is offered whole */
+      UI.xfer = k; UI.xferCode = k === 'full' ? saveCode() : progressCode(loadMeta());
+      UI.xferMsg = k === 'full' ? 'Select all of it and copy it.' : 'Write it down, or copy it.';
+      if (navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(UI.xferCode).then(() => { if (UI.xfer === k) { UI.xferMsg = k === 'full' ? 'Copied the full term.' : 'Copied. On the other device, choose “Enter a code”.'; keepFocus(render); } }, () => {});
       break;
     }
     case 'xferin': UI.xfer = 'in'; UI.xferMsg = ''; UI.xferDraft = ''; break;
     case 'xferload': {
-      const v = ($('#xfer-code') || {}).value || '', o = readCode(v);
-      if (!o) { UI.xferDraft = v; UI.xferMsg = 'That code could not be read. Check that all of it was copied.'; break; }
+      const v = ($('#xfer-code') || {}).value || '', o = readProgress(v) || readCode(v);
+      if (!o) { UI.xferDraft = v; UI.xferMsg = /HALFLIGHT1:/i.test(v) ? 'That code could not be read. Check that all of it was copied.' : 'That code could not be read. A progress code is 20 letters and numbers; check each one.'; break; }
       UI.xfer = null; UI.xferDraft = ''; UI.confirmBegin = false; UI.xferMsg = useCode(o); freshPreview(); top = true; break;
     }
     case 'xferclose': xferShut(); break;
@@ -6483,7 +6536,7 @@ function act(a, d) {
   else if (a === 'guide') { const el = d.sec ? $(`details[data-k="g-${d.sec}"]`) : $('#tabs'); if (el) el.scrollIntoView({ block: d.sec ? 'start' : 'nearest' }); }
   else if (a === 'point') spot(d.id);
   else if (a === 'perk') { const b = $(`[data-act="perk"][data-id="${d.id}"]`), msg = $('#perk-msg'); if ((!b || b.disabled) && msg) msg.focus({ preventScroll: true }); } /* a maxed or now unaffordable button cannot hold focus */
-  else if ((a === 'xferout' || a === 'xferin' || a === 'xferload') && UI.xfer) { const t = $('#xfer-code'); if (t) { t.focus({ preventScroll: true }); if (UI.xfer === 'out') t.select(); t.scrollIntoView({ block: 'nearest' }); } }
+  else if ((a === 'xferout' || a === 'xferfull' || a === 'xferin' || a === 'xferload') && UI.xfer) { const t = $('#xfer-code'); if (t) { t.focus({ preventScroll: true }); if (UI.xfer === 'out' || UI.xfer === 'full') t.select(); t.scrollIntoView({ block: 'nearest' }); } }
 }
 document.addEventListener('click', e => {
   const el = e.target.closest && e.target.closest('[data-act]');
