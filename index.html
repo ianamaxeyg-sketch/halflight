@@ -224,6 +224,15 @@ h1, h2, h3, h4, p { margin: 0; }
 .o-cost { grid-row: 1 / span 2; grid-column: 2; display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
 .o-why { grid-column: 1 / -1; font-size: .8rem; color: var(--fg-dim); display: flex; gap: .35rem; align-items: center; }
 .done-note { margin-top: 10px; padding: 8px 10px; border: 1px dashed var(--line); border-radius: 4px; font-size: .86rem; color: var(--fg-dim); }
+.fsites { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 12px; }
+.fsite { appearance: none; display: inline-flex; align-items: center; gap: .4rem; min-height: 40px; padding: .35rem .65rem; border: 1px solid var(--line); border-radius: 4px; background: transparent; color: var(--fg-dim); font-size: .86rem; cursor: pointer; }
+.fsite svg { width: 16px; height: 16px; flex: none; }
+.fsite:hover { border-color: var(--fg-dim); color: var(--fg); }
+.fsite[aria-pressed="true"] { background: var(--raised); border-color: var(--fg); color: var(--fg); font-weight: 600; }
+.fsite[data-state="warn"] svg { color: var(--warn); } .fsite[data-state="crit"] svg { color: var(--crit); }
+.fsel { display: flex; flex-wrap: wrap; gap: 2px 10px; align-items: baseline; margin: 0 0 8px; font-size: .86rem; color: var(--fg-dim); }
+.fsel b { color: var(--fg); font-size: .95rem; }
+.idle-ask { margin: 14px 0 0; padding: 8px 10px; border: 1px solid var(--warn); border-radius: 4px; font-size: .9rem; }
 .site-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr)); gap: 6px; margin-top: 14px; }
 .site-list button { text-align: left; }
 
@@ -5615,7 +5624,7 @@ function guideHTML() {
     <li>“Set in motion” names a consequence that will arrive in a later span. “This will not be the end of it” means one is coming that you cannot see yet. Both are tracked under Threads.</li>
   </ul>`;
 
-  const orders = `<p>You have two work crews a span. A third comes when 360 or more colonists are awake, and another while shifts are long. Orders can be given only when the story panel says “The span is yours”. ${show('map', 'the map')}</p>
+  const orders = `<p>You have two work crews a span. A third comes when 360 or more colonists are awake, and another while shifts are long. Orders can be given only when the story panel says “The span is yours”, and that panel lists them: pick a site, then an order. The site box under the map has the same orders. ${show('map', 'the map')}</p>
   <p class="eyebrow">Repairs</p>
   <ul class="g-orders"><li><b>Repair a site</b> ${cost('8 parts')} Restores 30% integrity at the Racks, the Hearth, the Mirror Field, the Ice Works or the vault seals at the Wreck.</li></ul>
   <p class="eyebrow">The Racks</p>
@@ -6049,6 +6058,12 @@ function noOrders(id) {
   if (id === 'flats') return f.dusk === 'forbidden' ? 'Duskbloom is forbidden.' : f.dusk === 'trial' ? 'Waiting on the volunteer trial.' : 'Waiting on Dr. Adeyemi’s findings.';
   return 'No work to order here.';
 }
+const siteOrders = id => Object.keys(ORDERS).filter(k => ORDERS[k].site === id && (!ORDERS[k].show || ORDERS[k].show(S)));
+function orderButton(k) {
+  const o = ORDERS[k], ok = orderState(o), c = o.cost || {};
+  const cost = Object.keys(c).map(r => `<span class="fx">${ico(RICON[r])}${c[r]} ${RNAME[r]}</span>`).join('');
+  return `<button class="order" data-act="order" data-id="${k}" ${ok === true ? '' : 'disabled'}><span class="o-label">${esc(orderLabel(o))}</span><span class="o-cost">${cost}</span><span class="o-desc">${esc(orderDesc(o))}</span>${ok === true ? '' : `<span class="o-why">${ico('warn')}${esc(ok)}</span>`}</button>`;
+}
 function renderSite() {
   const s = V(), id = s.sel && s.sites[s.sel] && s.sites[s.sel].known ? s.sel : 'keel', d = SITES[id], st = s.sites[id];
   let h = `<div class="site-head"><span class="badge">${ico(id)}</span><div><h3>${esc(d.name)}</h3><div class="st">${esc(siteLine(s, id))}</div></div></div><p class="blurb">${esc(d.blurb)}</p>`;
@@ -6057,14 +6072,10 @@ function renderSite() {
   if (here.length) h += `<div class="present">` + here.map(c => `<span>${sigil(c, true)}${esc(CHARS[c].name)}</span>`).join('') + `</div>`;
   if (!S) h += `<p class="empty" style="margin-top:14px">Work orders are given here once the term begins.</p>`;
   else if (S.phase !== 'ended') {
-    const list = Object.keys(ORDERS).filter(k => ORDERS[k].site === id && (!ORDERS[k].show || ORDERS[k].show(S))), cr = S.turn >= 1 ? crews() : 1;
+    const list = siteOrders(id), cr = S.turn >= 1 ? crews() : 1;
     h += `<div class="orders-head"><span class="eyebrow">Work orders</span><span class="crew">${S.turn < 1 ? 'Available once you take office' : `${Math.max(0, cr - S.orders)} of ${cr} ${cr === 1 ? 'crew' : 'crews'} free this span`}</span></div>`;
     if (!list.length) h += `<p class="empty">${esc(noOrders(id))}</p>`;
-    else h += `<div class="orders">` + list.map(k => {
-      const o = ORDERS[k], ok = orderState(o), c = o.cost || {};
-      const cost = Object.keys(c).map(r => `<span class="fx">${ico(RICON[r])}${c[r]} ${RNAME[r]}</span>`).join('');
-      return `<button class="order" data-act="order" data-id="${k}" ${ok === true ? '' : 'disabled'}><span class="o-label">${esc(orderLabel(o))}</span><span class="o-cost">${cost}</span><span class="o-desc">${esc(orderDesc(o))}</span>${ok === true ? '' : `<span class="o-why">${ico('warn')}${esc(ok)}</span>`}</button>`;
-    }).join('') + `</div>`;
+    else h += `<div class="orders">` + list.map(orderButton).join('') + `</div>`;
     if (S.lastOrder && S.lastOrder.site === id) h += `<div class="done-note">${esc(S.lastOrder.text)} ${fxChips(S.lastOrder.d)}</div>`;
   }
   $('#sitebox').innerHTML = h;
@@ -6144,23 +6155,44 @@ function reportHTML() {
 function watchList() {
   const e = econ(), p = project(), out = [], st = S.sites;
   const run = e.foodNet < 0 ? S.food / -e.foodNet : Infinity;
-  if (run < 6) out.push({ lv: run < 3 ? 'crit' : 'warn', text: `Stores last ${plural(Math.max(0, Math.floor(run)), 'more span')} at this rate.`, act: 'site', id: 'racks' });
-  if (p.powerOut) out.push({ lv: p.powerOut - S.turn < 3 ? 'crit' : 'warn', text: `Reserve power fails in span ${p.powerOut} at this rate.`, act: 'site', id: 'hearth' });
+  if (run < 6) out.push({ lv: run < 3 ? 'crit' : 'warn', text: `Stores last ${plural(Math.max(0, Math.floor(run)), 'more span')} at this rate.`, act: 'fsite', id: 'racks' });
+  if (p.powerOut) out.push({ lv: p.powerOut - S.turn < 3 ? 'crit' : 'warn', text: `Reserve power fails in span ${p.powerOut} at this rate.`, act: 'fsite', id: 'hearth' });
   for (const id of ['hearth', 'racks', 'ice', 'mirror', 'wreck']) {
     const i = st[id].integ;
     if (i >= 50 || (id === 'mirror' && S.turn >= sp(15))) continue;
-    out.push({ lv: i < 35 ? 'crit' : 'warn', text: `${SITES[id].name}${id === 'wreck' ? ': vault seals are' : ' is'} at ${i}%.` + (id === 'wreck' ? ' Under 40%, sleepers die.' : id === 'ice' ? ' Water is running short.' : ''), act: 'site', id });
+    out.push({ lv: i < 35 ? 'crit' : 'warn', text: `${SITES[id].name}${id === 'wreck' ? ': vault seals are' : ' is'} at ${i}%.` + (id === 'wreck' ? ' Under 40%, sleepers die.' : id === 'ice' ? ' Water is running short.' : ''), act: 'fsite', id });
   }
-  if (S.morale < 30) out.push({ lv: S.morale < 18 ? 'crit' : 'warn', text: 'Morale is close to breaking. An open floor at the Keel would help.', act: 'site', id: 'keel' });
+  if (S.morale < 30) out.push({ lv: S.morale < 18 ? 'crit' : 'warn', text: 'Morale is close to breaking. An open floor at the Keel would help.', act: 'fsite', id: 'keel' });
   for (const g of S.goals) if (g.state === 'open' && sp(GOALS[g.id].by) - S.turn <= 1) out.push({ lv: 'warn', text: `Due ${sp(GOALS[g.id].by) <= S.turn ? 'this span' : 'next span'}: ${GOALS[g.id].text}`, act: 'tab', id: 'threads' });
   return out.slice(0, 5);
+}
+/* Work orders sit in the story panel as well as under the map. On a phone the map's site box is a long scroll below
+   "End span", and the first 40-span playtest gave no order in 21 spans. The panel opens on the most pressing site. */
+const fkey = () => S ? S.seed + ':' + S.turn : '';
+const canOrder = id => siteOrders(id).some(k => orderState(ORDERS[k]) === true);
+const anyOrder = () => Object.keys(SITES).some(id => S.sites[id] && S.sites[id].known && canOrder(id));
+function freeSite() {
+  if (UI.fkey === fkey() && UI.fsel && S.sites[UI.fsel] && S.sites[UI.fsel].known) return UI.fsel;
+  const worn = ['hearth', 'racks', 'ice', 'mirror', 'wreck'].filter(id => S.sites[id].integ < 85).sort((x, y) => S.sites[x].integ - S.sites[y].integ);
+  const c = watchList().filter(x => x.act === 'fsite').map(x => x.id).concat(worn, ['racks', 'wreck', 'keel']);
+  return c.find(id => S.sites[id].known && canOrder(id)) || 'keel';
 }
 function freeHTML() {
   const cr = crews(), left = Math.max(0, cr - S.orders), w = watchList(), quiet = S.flags.patience === 'muted' || S.chars.patience.trust < 25;
   let h = `<article class="free"><div class="ev-head"><span class="chip eyebrow k-order">${kg('order')}The span is yours</span><span class="when">Span ${S.turn} of ${LAST_SPAN}</span></div><h2>${left > 0 ? 'Direct the work' : 'Orders given'}</h2>` +
-    `<div class="prose"><p>${left > 0 ? `You have ${plural(left, 'work crew')} uncommitted. Pick a site on the map to give an order, or change the standing policy under Colony.` : 'Every crew is committed. End the span when you are ready.'}</p></div>`;
+    `<div class="prose"><p>${left > 0 ? `You have ${plural(left, 'work crew')} to send. Pick a site and give it an order, here or on the map. Crews you don’t send do nothing this span, and every site wears down.` : 'Every crew is committed. End the span when you are ready.'}</p></div>`;
   if (w.length) h += `<p class="sec">${quiet ? 'On your desk' : 'Patience is watching'}</p><ul class="watch">` + w.map(x => `<li class="${x.lv}"><button data-act="${x.act}" data-id="${x.id}"><span class="mk" aria-hidden="true">▲</span><span>${esc(x.text)}</span></button></li>`).join('') + `</ul>`;
-  return h + `<div class="actions"><button class="btn primary" data-act="end" id="btn-main">End span ${S.turn}</button>${left > 0 ? `<span class="hint">${plural(left, 'crew')} will stand idle.</span>` : ''}${S.turn <= 2 ? `<button class="btn small" data-act="guide" data-sec="orders" data-id="guide-orders">How do I give an order?</button>` : ''}</div></article>`;
+  if (left > 0) {
+    const sel = freeSite(), sites = Object.keys(SITES).filter(id => S.sites[id] && S.sites[id].known && siteOrders(id).length);
+    h += `<p class="sec">Work orders · ${left} of ${plural(cr, 'crew')} free</p><div class="fsites" role="group" aria-label="Sites with work">` +
+      sites.map(id => `<button class="fsite" data-act="fsite" data-id="${id}" aria-pressed="${id === sel}" data-state="${siteState(S, id)}">${ico(id)}<span>${esc(SITES[id].name.replace(/^The /, ''))}</span></button>`).join('') + `</div>` +
+      `<div class="fsel"><b>${esc(SITES[sel].name)}</b><span>${esc(siteLine(S, sel))}</span>${SITES[sel].integ ? `<span>${sel === 'wreck' ? 'Vault seals' : 'Integrity'} ${S.sites[sel].integ}%</span>` : ''}</div>` +
+      `<div class="orders">` + siteOrders(sel).map(orderButton).join('') + `</div>`;
+  }
+  if (S.lastOrder) h += `<div class="done-note">${esc(S.lastOrder.text)} ${fxChips(S.lastOrder.d)}</div>`;
+  const ask = UI.idleAsk === fkey() && S.orders === 0;
+  if (ask) h += `<p class="idle-ask" role="status" id="idle-ask">No crew has an order this span. Nothing gets mended or built, and the sites keep wearing down.</p>`;
+  return h + `<div class="actions"><button class="btn primary" data-act="${ask ? 'endidle' : 'end'}" id="btn-main">${ask ? `End span ${S.turn} anyway` : `End span ${S.turn}`}</button>${left > 0 && !ask ? `<span class="hint">${plural(left, 'crew')} will stand idle.</span>` : ''}${S.turn <= 2 ? `<button class="btn small" data-act="guide" data-sec="orders" data-id="guide-orders">How do orders work?</button>` : ''}</div></article>`;
 }
 function foundHTML() {
   const m = loadMeta(), n = ENDING_ORDER.filter(id => m.endings[id]).length;
@@ -6485,8 +6517,12 @@ function act(a, d) {
     case 'resume': { const sv = loadSave(); if (sv) { S = sv; setTerm(S); UI.confirmBegin = false; xferShut(); top = true; } break; }
     case 'choose': top = choose(+d.i); break;
     case 'cont': cont(); top = true; break;
-    case 'end': top = endSpan(); break;
-    case 'site': if (SITES[d.id]) { V().sel = d.id; if (S) save(); } break;
+    case 'end':   /* a span with crews free, orders on offer and none given asks once */
+      if (S && S.phase === 'free' && S.orders === 0 && UI.idleAsk !== fkey() && anyOrder()) { UI.idleAsk = fkey(); break; }
+      top = endSpan(); break;
+    case 'endidle': top = endSpan(); break;
+    case 'site': if (SITES[d.id]) { V().sel = d.id; if (S) save(); if (S && S.phase === 'free') { UI.fsel = d.id; UI.fkey = fkey(); } } break;
+    case 'fsite': if (SITES[d.id] && S && S.phase === 'free') { UI.fsel = d.id; UI.fkey = fkey(); V().sel = d.id; save(); } break;
     case 'order': issue(d.id); break;
     case 'policy': setPolicy(d.k, d.v); break;
     case 'tab': UI.tab = d.id; UI.jspan = null; UI.flash = null; saveUI(); break;
